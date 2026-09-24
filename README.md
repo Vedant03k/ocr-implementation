@@ -45,4 +45,4 @@ Implemented and browser-tested end-to-end, including against a real photo of han
 - [x] LLM cleanup pass for OCR typos
 - [x] UI for uploading images/video and viewing results
 - [ ] Scene-change frame sampling mode
-- [x] AWS EKS + KServe deployment applied to a real cluster — PaddleOCR + orchestrator live; GOT-OCR2.0 + LLM cleanup blocked on an AWS GPU-quota approval (see [deploy/README.md](deploy/README.md#current-deployment-status-2026-09-24) for live status and resume steps)
+- [x] AWS EKS + KServe deployment applied to a real cluster — all four components (PaddleOCR, GOT-OCR2.0, LLM cleanup, orchestrator) live and verified end-to-end; GOT-OCR2.0/LLM cleanup run on CPU pending an AWS GPU-quota approval (see [deploy/README.md](deploy/README.md#current-deployment-status-2026-09-24) for live status, latency notes, and how to restore GPU)

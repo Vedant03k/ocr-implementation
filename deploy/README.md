@@ -4,47 +4,50 @@ Everything needed to run the OCR pipeline as three independently-scaled KServe `
 
 ## Current deployment status (2026-09-24)
 
-A real cluster exists and is partially live. Quick reference:
+**Fully live, end-to-end, on CPU.** A real image was posted to the orchestrator's public URL and came back with correct PaddleOCR + GOT-OCR2.0 + LLM-cleanup output. Quick reference:
 
 | Resource | Value |
 | --- | --- |
 | EKS cluster | `ocr-pipeline`, region `us-east-1` |
 | AWS account | `711446557912` |
 | S3 model bucket | `s3://ocr-pipeline-models-711446557912/models/{got_ocr2,llm_cleanup}/v1/` |
-| ECR repos | `711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/{paddleocr,got-ocr2,orchestrator}` |
+| ECR repos | `711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/{paddleocr,got-ocr2,llm-cleanup,orchestrator}` |
 | Orchestrator URL | `http://a39c1f170492e470b8d22a14810ebd5d-1634070530.us-east-1.elb.amazonaws.com` |
 
-**KServe was installed in RawDeployment mode, not Serverless.** The manifests here were originally written assuming Knative-style autoscaling (`scaleMetric: concurrency`), but installing Istio + Knative just for that turned out to be more moving parts / resource use than this cluster's 2x `m5.large` CPU nodegroup comfortably supports. RawDeployment mode (cert-manager + KServe controller only, plain HPA autoscaling) is what's actually running. Consequence: **the GPU services do not scale to zero** — RawDeployment's scale-from-zero (KEDA-based) is unverified/undocumented as of KServe v0.20, so `got-ocr2` and `llm-cleanup` both run `minReplicas: 1`. Since this is low-volume test/demo traffic where cold starts would hurt more than they'd save, that trade was made deliberately — see the comments in `kserve/got-ocr2-isvc.yaml`. Scale the GPU nodegroup to 0 manually between sessions to control cost (see below).
+**KServe was installed in RawDeployment mode, not Serverless.** The manifests here were originally written assuming Knative-style autoscaling (`scaleMetric: concurrency`), but installing Istio + Knative just for that turned out to be more moving parts / resource use than this cluster's CPU nodegroup comfortably supports. RawDeployment mode (cert-manager + KServe controller only, plain HPA autoscaling) is what's actually running.
 
-Component status:
+**GPU quota was never approved — `got-ocr2` and `llm-cleanup` were switched to run on CPU instead of waiting.** This account's quota for "Running On-Demand G and VT instances" (`g4dn.xlarge`'s family) is **0 vCPUs across every region and for spot too** (checked us-east-1, us-east-2, us-west-2, both on-demand `L-DB2E81BA` and spot `L-3819A6DF`) — a new-account default with an increase request stuck in manual AWS review (`CASE_OPENED`, filed via `aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-DB2E81BA --desired-value 8 --region us-east-1`). Rather than block the whole deployment on that, both GPU services were re-pointed at the existing CPU nodegroup:
+- `got-ocr2`: same custom container, just `nodeSelector: {workload: cpu}` instead of the GPU node group, no `nvidia.com/gpu` resources. `GotOcrRecognizer` already fell back to CPU automatically when CUDA isn't available, so no application code changed.
+- `llm-cleanup`: this one *did* need a real change — KServe's built-in HuggingFace+vLLM ServingRuntime (the original plan) has no practical CPU inference path, so it was replaced with a custom container (`deploy/serving/llm_cleanup_server.py`) running plain `transformers.generate()` on CPU via `ocr_pipeline.cleanup.TextCleaner` — the exact same class the local dev pipeline uses, so cleanup behavior is identical. The orchestrator's `_call_cleanup` was updated to call this new predict-protocol endpoint (`POST {"instances":[{"lines":[...]}]}`) instead of an OpenAI-style chat-completions endpoint.
+
+**Cost of the CPU fallback: latency.** A single-line smoke test took **~148s round-trip** (PaddleOCR + GOT-OCR2.0 + 2x LLM cleanup calls, all CPU, run sequentially by the orchestrator). Multi-line documents will take proportionally longer. Fine for the demo/low-volume use case this was built for; revisit (see "To restore GPU" below) before any real usage.
+
+Component status — all four Ready/Running:
 
 | Component | Status |
 | --- | --- |
 | EKS cluster + Cluster Autoscaler + KServe control plane | ✅ Up |
-| `paddleocr` InferenceService | ✅ Ready (CPU) |
-| `orchestrator` Deployment | ✅ Running (2/2), LoadBalancer Service live |
-| `got-ocr2` InferenceService | ⛔ Blocked — see below |
-| `llm-cleanup` InferenceService | ⛔ Blocked — see below |
-
-**Blocker: GPU instance quota.** This AWS account's default quota for "Running On-Demand G and VT instances" (the family `g4dn.xlarge` belongs to) was **0 vCPUs** — a new-account default, not a bug in the manifests. An increase request to 8 vCPUs was filed (`aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-DB2E81BA --desired-value 8 --region us-east-1`) and is sitting as an AWS support case (`CASE_OPENED`), not auto-approved. Check status with:
-```powershell
-aws service-quotas list-requested-service-quota-change-history --service-code ec2 --region us-east-1 --query "RequestedQuotas[?QuotaCode=='L-DB2E81BA']"
-```
-Once `Status` shows `CASE_CLOSED` and the quota value reflects, the two pending GPU pods (already applied, sitting `Pending`) should schedule on their own once Cluster Autoscaler brings up a `g4dn.xlarge` node — no re-apply needed.
+| `paddleocr` InferenceService | ✅ Ready (CPU, as always) |
+| `got-ocr2` InferenceService | ✅ Ready (CPU fallback) |
+| `llm-cleanup` InferenceService | ✅ Ready (CPU fallback, custom container) |
+| `orchestrator` Deployment | ✅ Running (2/2), LoadBalancer Service live, verified end-to-end |
 
 **Bugs found and fixed while bringing this up for real** (all already applied in the files below, kept here as a record since they weren't visible from manifests alone):
 - `docker/paddleocr.Dockerfile` was missing `libgl1`, `libglib2.0-0`, `libgomp1` — opencv/paddlepaddle's compiled deps that `python:3.11-slim` doesn't ship. Caused an immediate `ImportError: libGL.so.1` crash loop.
-- All three custom-container images needed `imagePullPolicy: Always` added explicitly. Without it, `IfNotPresent` (which the KServe/K8s pod spec used) meant a node that had already pulled a broken `:latest` image kept reusing it after rebuilds/pushes — `kubectl rollout restart` alone did not fix this.
+- All custom-container images needed `imagePullPolicy: Always` added explicitly. Without it, `IfNotPresent` (which the KServe/K8s pod spec used) meant a node that had already pulled a broken `:latest` image kept reusing it after rebuilds/pushes — `kubectl rollout restart` alone did not fix this.
 - `docker login`/`aws ecr get-login-password | docker login` returned a `400 Bad Request` on this machine regardless of encoding fixes — root cause not fully identified (possibly a Docker Desktop / AWS CLI version interaction). Worked around by using the `docker-credential-ecr-login` credential helper (`credHelpers` in `~/.docker/config.json`) instead of `docker login` token auth.
 - Service DNS names in `k8s/orchestrator.yaml` needed to be `<name>-predictor.ocr-pipeline.svc.cluster.local`, not `<name>.ocr-pipeline.svc.cluster.local` — KServe's RawDeployment mode suffixes the generated Service with `-predictor`.
+- The `cpu-workers` node IAM role had **no S3 permissions at all** — the storage-initializer init containers for `got-ocr2`/`llm-cleanup` got `403 Forbidden` pulling model weights. Fixed with an inline policy (`ocr-model-bucket-read`) on the node role granting `s3:GetObject`/`s3:ListBucket` on the model bucket. (This gap existed from the start; it just was never hit before because those pods never got scheduled anywhere until the CPU fallback.)
+- `deploy/requirements/got-ocr2.txt` was missing `pillow` — `recognizer_specialist.py` imports `PIL.Image` directly, not just transitively through `transformers`/`accelerate`. Caused a `ModuleNotFoundError` crash loop in the main container (separate from the init-container S3 issue above).
+- **The orchestrator blocked its own event loop.** `deploy/orchestrator/app.py` called the downstream KServe services with a *synchronous* `httpx.Client` from inside `async def` endpoints — fine with GPU-speed inference, but with CPU-speed inference the blocking call held the event loop long enough that the `/healthz` readiness probe missed its window, Kubernetes pulled the pod out of the Service, and in-flight requests died with "empty reply from server". Fixed by switching to `httpx.AsyncClient` and `await`-ing every downstream call end to end (`_call_paddleocr`/`_call_got_ocr2`/`_call_cleanup`/`_detections_for_frame`/`_run_video` are all `async def` now).
+- **The Classic ELB's default 60s idle timeout** was killing any request that took longer than a minute — which, on CPU, is basically all of them. `k8s/orchestrator.yaml`'s Service now carries `service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "300"`.
 
-**To resume from here:** once the quota case clears, verify with `kubectl -n ocr-pipeline get inferenceservices`, then follow step 6 below (point the frontend at the orchestrator URL above, tighten `OCR_CORS_ORIGINS` in `k8s/orchestrator.yaml` off of `"*"`).
-
-**To pause and save cost:** scale the GPU nodegroup to 0 when not actively testing —
+**To restore GPU (once quota clears):** `got-ocr2-isvc.yaml` and `llm-cleanup-isvc.yaml` both carry comments marking exactly what to revert (nodeSelector/tolerations/resources back to GPU, `llm-cleanup` back to the vLLM ServingRuntime if desired for real batching throughput) — see git history for the original GPU versions of both files and `docker/got-ocr2.Dockerfile`. Check quota status with:
 ```powershell
-eksctl scale nodegroup --cluster=ocr-pipeline --region=us-east-1 --name=gpu-workers --nodes=0 --nodes-min=0 --nodes-max=3
+aws service-quotas list-requested-service-quota-change-history --service-code ec2 --region us-east-1 --query "RequestedQuotas[?QuotaCode=='L-DB2E81BA']"
 ```
-Cluster Autoscaler will bring it back to 1 automatically the next time a GPU pod needs scheduling.
+
+**To pause and save cost:** nothing GPU is running right now (the fallback avoided the GPU nodegroup entirely), so there's no GPU cost to pause. The CPU nodegroup (`m5.large` x2-4, autoscaled) is the only compute running.
 
 ---
 

@@ -21,7 +21,6 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from ocr_pipeline.cleanup import CLEANUP_SYSTEM_PROMPT, build_numbered_input, parse_numbered_lines
 from ocr_pipeline.frame_sampler import sample_frames
 from ocr_pipeline.utils import crop_polygon
 
@@ -34,7 +33,14 @@ LLM_CLEANUP_URL = os.environ["LLM_CLEANUP_URL"]
 FRAME_SAMPLER_FPS = float(os.environ.get("FRAME_SAMPLER_FPS", "1"))
 FRAME_SAMPLER_DEDUPE_THRESHOLD = float(os.environ.get("FRAME_SAMPLER_DEDUPE_THRESHOLD", "0.97"))
 
-client = httpx.Client(timeout=60.0)
+# AsyncClient (not Client) is required here: this API's endpoints are async
+# def, and a blocking sync httpx call inside an async handler freezes the
+# whole event loop for the call's duration — including /healthz, which then
+# fails the readiness probe and gets the pod pulled out of the Service
+# mid-request. 300s (not 60s) because the CPU-fallback got-ocr2/llm-cleanup
+# services (see deploy/README.md) are much slower than the GPU path they
+# were sized for.
+client = httpx.AsyncClient(timeout=300.0)
 
 app = FastAPI()
 app.add_middleware(
@@ -68,51 +74,41 @@ def _encode_png(image: np.ndarray) -> str:
     return base64.b64encode(buf.tobytes()).decode("ascii")
 
 
-def _call_paddleocr(image: np.ndarray) -> list[dict]:
-    response = client.post(PADDLEOCR_URL, json={"instances": [{"image_b64": _encode_png(image)}]})
+async def _call_paddleocr(image: np.ndarray) -> list[dict]:
+    response = await client.post(PADDLEOCR_URL, json={"instances": [{"image_b64": _encode_png(image)}]})
     response.raise_for_status()
     return response.json()["predictions"][0]["detections"]
 
 
-def _call_got_ocr2(crops: list[np.ndarray]) -> list[str]:
+async def _call_got_ocr2(crops: list[np.ndarray]) -> list[str]:
     if not crops:
         return []
     instances = [{"image_b64": _encode_png(crop)} for crop in crops]
-    response = client.post(GOT_OCR2_URL, json={"instances": instances})
+    response = await client.post(GOT_OCR2_URL, json={"instances": instances})
     response.raise_for_status()
     return response.json()["predictions"]
 
 
-def _call_cleanup(lines: list[str]) -> list[str]:
+async def _call_cleanup(lines: list[str]) -> list[str]:
     if not lines or not any(line.strip() for line in lines):
         return list(lines)
-    payload = {
-        "model": "llm-cleanup",
-        "messages": [
-            {"role": "system", "content": CLEANUP_SYSTEM_PROMPT},
-            {"role": "user", "content": build_numbered_input(lines)},
-        ],
-        "temperature": 0,
-    }
-    response = client.post(LLM_CLEANUP_URL, json=payload)
+    response = await client.post(LLM_CLEANUP_URL, json={"instances": [{"lines": lines}]})
     response.raise_for_status()
-    output = response.json()["choices"][0]["message"]["content"]
-    parsed = parse_numbered_lines(output, expected=len(lines))
-    return parsed if parsed is not None else list(lines)
+    return response.json()["predictions"][0]
 
 
-def _detections_for_frame(
+async def _detections_for_frame(
     image: np.ndarray, prefix: str, relative_timestamp: float | None = None
 ) -> list[RawDetectionOut]:
     height, width = image.shape[:2]
-    raw_detections = _call_paddleocr(image)
+    raw_detections = await _call_paddleocr(image)
 
     candidate_texts = [d["text"] for d in raw_detections]
     crops = [crop_polygon(image, np.asarray(d["poly"], dtype=np.float32)) for d in raw_detections]
-    specialist_texts = _call_got_ocr2(crops)
+    specialist_texts = await _call_got_ocr2(crops)
 
-    cleaned_candidates = _call_cleanup(candidate_texts)
-    cleaned_specialists = _call_cleanup(specialist_texts)
+    cleaned_candidates = await _call_cleanup(candidate_texts)
+    cleaned_specialists = await _call_cleanup(specialist_texts)
 
     out = []
     for i, det in enumerate(raw_detections):
@@ -135,7 +131,7 @@ def _detections_for_frame(
     return out
 
 
-def _run_video(path: str) -> list[RawDetectionOut]:
+async def _run_video(path: str) -> list[RawDetectionOut]:
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 1.0
     frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -147,7 +143,7 @@ def _run_video(path: str) -> list[RawDetectionOut]:
         sample_frames(path, fps=FRAME_SAMPLER_FPS, dedupe_similarity_threshold=FRAME_SAMPLER_DEDUPE_THRESHOLD)
     ):
         relative_timestamp = (timestamp / duration) if duration else 0.0
-        detections.extend(_detections_for_frame(frame, f"f{frame_index}", relative_timestamp))
+        detections.extend(await _detections_for_frame(frame, f"f{frame_index}", relative_timestamp))
     return detections
 
 
@@ -165,10 +161,10 @@ async def run_ocr(file: UploadFile = File(...)) -> OcrResponse:
 
     try:
         if suffix in VIDEO_EXTENSIONS:
-            detections = _run_video(tmp_path)
+            detections = await _run_video(tmp_path)
         else:
             image = cv2.imread(tmp_path)
-            detections = _detections_for_frame(image, "d") if image is not None else []
+            detections = await _detections_for_frame(image, "d") if image is not None else []
     finally:
         _os.remove(tmp_path)
 
@@ -178,3 +174,8 @@ async def run_ocr(file: UploadFile = File(...)) -> OcrResponse:
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    await client.aclose()

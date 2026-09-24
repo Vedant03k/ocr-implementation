@@ -1,16 +1,14 @@
-# LLM cleanup (Qwen2.5-1.5B-Instruct): KServe's built-in HuggingFace
-# ServingRuntime with the vLLM backend, instead of a custom container — this
-# is the model that most benefits from a real LLM-serving engine (continuous
-# batching, paged attention) rather than raw transformers.generate(), which
-# is what the local dev setup (src/ocr_pipeline/cleanup.py) uses.
+# LLM cleanup (Qwen2.5-1.5B-Instruct): custom predictor, CPU.
 #
-# Requires the huggingfaceserver ClusterServingRuntime (ships with a
-# standard KServe install) to be present in the cluster. Field/arg names
-# here match KServe's documented HF+vLLM pattern as of writing — verify
-# against the installed KServe version with `kubectl explain
-# inferenceservice.spec.predictor.model` before applying, since this API has
-# evolved across KServe releases and hasn't been validated against a live
-# cluster from this repo.
+# Originally KServe's built-in HuggingFace ServingRuntime with the vLLM
+# backend (continuous batching, paged attention) — switched to a custom
+# container running plain transformers.generate() on CPU because vLLM has no
+# practical CPU inference path, and this account's G/VT GPU quota is 0 with
+# no approved increase (see deploy/README.md "Current deployment status").
+# Reuses ocr_pipeline.cleanup.TextCleaner directly (same code the local dev
+# pipeline uses), so cleanup behavior matches local dev exactly — see
+# deploy/serving/llm_cleanup_server.py. Revert to the vLLM ServingRuntime
+# below (see git history) once GPU quota clears, for real batching/throughput.
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
@@ -20,29 +18,41 @@ metadata:
     serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
-    # See got-ocr2-isvc.yaml for why this is 1 instead of 0.
     minReplicas: 1
     maxReplicas: 2
     nodeSelector:
-      nvidia.com/gpu.present: "true"
-    tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
-    model:
-      modelFormat:
-        name: huggingface
-      storageUri: s3://ocr-pipeline-models-711446557912/models/llm_cleanup/v1/
-      args:
-        - --backend=vllm
-        - --dtype=float16
-        - --max-model-len=2048
-      resources:
-        requests:
-          cpu: "2"
-          memory: 10Gi
-          nvidia.com/gpu: "1"
-        limits:
-          cpu: "4"
-          memory: 14Gi
-          nvidia.com/gpu: "1"
+      workload: cpu
+    initContainers:
+      - name: fetch-weights
+        image: kserve/storage-initializer:latest
+        args:
+          - s3://ocr-pipeline-models-711446557912/models/llm_cleanup/v1/
+          - /mnt/models
+        volumeMounts:
+          - name: model-store
+            mountPath: /mnt/models
+    containers:
+      - name: kserve-container
+        image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/llm-cleanup:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        env:
+          - name: LLM_CLEANUP_MODEL_DIR
+            value: /mnt/models
+          - name: LLM_CLEANUP_DEVICE
+            value: cpu
+        volumeMounts:
+          - name: model-store
+            mountPath: /mnt/models
+        resources:
+          requests:
+            cpu: "1"
+            memory: 4Gi
+          limits:
+            cpu: "2"
+            memory: 6Gi
+    volumes:
+      - name: model-store
+        emptyDir: {}

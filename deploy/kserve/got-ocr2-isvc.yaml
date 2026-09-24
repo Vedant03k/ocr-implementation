@@ -1,10 +1,18 @@
-# GOT-OCR2.0: custom predictor, GPU. Weights (~1.1GB) are NOT baked into the
+# GOT-OCR2.0: custom predictor. Weights (~1.1GB) are NOT baked into the
 # image — an explicit init container pulls them from S3 into an emptyDir
 # shared with the main container at pod startup, using KServe's standalone
 # storage-initializer image. (We use an explicit init container rather than
 # KServe's automatic storageUri-on-custom-containers wiring, since that
 # wiring varies across KServe versions — this pattern is version-independent
 # and easy to verify with `kubectl describe pod`.)
+#
+# CPU, not GPU: this account's G/VT instance quota is 0 with no approved
+# increase (see deploy/README.md "Current deployment status"). Runs on the
+# existing cpu-workers nodegroup instead of waiting on AWS. Slower per
+# request, but GotOcrRecognizer already falls back to CPU automatically when
+# CUDA isn't available, so no code change was needed. Revert nodeSelector/
+# tolerations/resources below to the GPU versions (see git history) once the
+# quota clears.
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
@@ -14,19 +22,10 @@ metadata:
     serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
-    # minReplicas: 0 would be ideal (GPU nodes are expensive) but RawDeployment
-    # mode's scale-from-zero (KEDA-based) is unverified/undocumented as of
-    # KServe v0.20 — chose reliability over cost here since this is low-volume
-    # test/demo traffic and cold starts would hurt latency. Scale the GPU
-    # nodegroup to 0 manually between sessions instead (see deploy/README.md).
     minReplicas: 1
     maxReplicas: 3
     nodeSelector:
-      nvidia.com/gpu.present: "true" # matches the GPU node group's label, see deploy/eks/cluster.yaml
-    tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
+      workload: cpu
     initContainers:
       - name: fetch-weights
         image: kserve/storage-initializer:latest
@@ -46,18 +45,18 @@ spec:
         env:
           - name: GOT_OCR2_MODEL_DIR
             value: /mnt/models
+          - name: GOT_OCR2_DEVICE
+            value: cpu
         volumeMounts:
           - name: model-store
             mountPath: /mnt/models
         resources:
           requests:
+            cpu: "1"
+            memory: 4Gi
+          limits:
             cpu: "2"
             memory: 6Gi
-            nvidia.com/gpu: "1"
-          limits:
-            cpu: "4"
-            memory: 10Gi
-            nvidia.com/gpu: "1"
     volumes:
       - name: model-store
         emptyDir: {}
