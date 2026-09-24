@@ -1,7 +1,7 @@
 paddleocr:
-  # Weights are cached by PaddleX at ~/.paddlex/official_models, not in-repo.
+  # Weights cache to models/paddleocr via PADDLE_PDX_CACHE_HOME (set in ocr_pipeline/__init__.py).
   lang: en
-  use_gpu: false
+  device: cpu   # set to gpu / gpu:0 if paddlepaddle-gpu is installed instead of paddlepaddle
 
 got_ocr2:
   model_dir: models/got_ocr2
