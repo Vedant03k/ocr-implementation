@@ -1,6 +1,6 @@
-<svg width="680" height="730" viewBox="0 0 680 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Helvetica, Arial, sans-serif">
-<title>OCR pipeline architecture combining PaddleOCR and GOT-OCR2.0</title>
-<desc>Image or video input flows through a frame sampler, then PaddleOCR text detection, then a confidence router that sends printed text to the PaddleOCR recognizer and messy handwriting to GOT-OCR2.0, before merging into a final JSON output.</desc>
+<svg width="680" height="830" viewBox="0 0 680 830" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>OCR pipeline architecture combining PaddleOCR, GOT-OCR2.0 and an LLM cleanup stage</title>
+<desc>Image or video input flows through a frame sampler, then PaddleOCR text detection, then a confidence router that sends printed text to the PaddleOCR recognizer and messy handwriting to GOT-OCR2.0, then merges into reading order, then an LLM cleanup stage corrects OCR spelling errors, before final JSON output.</desc>
 
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -14,12 +14,14 @@
   .purple{ fill: #EEEDFE; stroke: #534AB7; }
   .teal  { fill: #E1F5EE; stroke: #0F6E56; }
   .coral { fill: #FAECE7; stroke: #993C1D; }
+  .blue  { fill: #E5F0FE; stroke: #1D4E99; }
   .th { font-size: 14px; font-weight: 600; }
   .ts { font-size: 12px; }
   .tgray { fill: #2C2C2A; }
   .tpurple { fill: #26215C; }
   .tteal { fill: #04342C; }
   .tcoral { fill: #4A1B0C; }
+  .tblue { fill: #0C2C57; }
   .arr { stroke: #5f5e5a; stroke-width: 1.5; fill: none; }
 </style>
 
@@ -31,6 +33,7 @@
 <line class="arr" x1="180" y1="490" x2="340" y2="540" marker-end="url(#arrow)"/>
 <line class="arr" x1="500" y1="490" x2="340" y2="540" marker-end="url(#arrow)"/>
 <line class="arr" x1="340" y1="590" x2="340" y2="640" marker-end="url(#arrow)"/>
+<line class="arr" x1="340" y1="690" x2="340" y2="740" marker-end="url(#arrow)"/>
 
 <g>
   <rect class="box gray" x="250" y="40" width="180" height="50"/>
@@ -75,8 +78,14 @@
 </g>
 
 <g>
-  <rect class="box gray" x="220" y="640" width="240" height="50"/>
-  <text x="340" y="660" text-anchor="middle" class="th tgray">Output</text>
-  <text x="340" y="678" text-anchor="middle" class="ts tgray">Text, boxes, timestamps (JSON)</text>
+  <rect class="box blue" x="220" y="640" width="240" height="50"/>
+  <text x="340" y="660" text-anchor="middle" class="th tblue">LLM cleanup</text>
+  <text x="340" y="678" text-anchor="middle" class="ts tblue">Corrects OCR spelling errors</text>
+</g>
+
+<g>
+  <rect class="box gray" x="220" y="740" width="240" height="50"/>
+  <text x="340" y="760" text-anchor="middle" class="th tgray">Output</text>
+  <text x="340" y="778" text-anchor="middle" class="ts tgray">Text, boxes, timestamps (JSON)</text>
 </g>
 </svg>
