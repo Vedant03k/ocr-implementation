@@ -1,0 +1,8 @@
+src/
+models/
+config/
+scripts/
+tests/
+.venv/
+requirements.txt
+STEPS_TO_DEVELOP.md
