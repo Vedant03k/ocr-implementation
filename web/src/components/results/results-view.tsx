@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { ExportButtons } from "@/components/results/export-buttons";
 import { ImageResults } from "@/components/results/image-results";
+import { ResultsTextPanel } from "@/components/results/results-text-panel";
 import { VideoResults } from "@/components/results/video-results";
 import { SettingsPanel } from "@/components/settings-panel";
 import type { RawDetection } from "@/lib/mock-fixtures";
@@ -72,6 +73,8 @@ export function ResultsView({
           onThresholdChange={onThresholdChange}
           routingStats={routingStats}
         />
+
+        <ResultsTextPanel result={result} />
       </div>
     </div>
   );

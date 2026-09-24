@@ -21,11 +21,15 @@ export async function fetchDetections(file: File, signal: AbortSignal): Promise<
   }
 
   const data = (await response.json()) as OcrApiResponse;
-  // The backend serializes an absent timestamp as JSON null; normalize to
-  // undefined here so it matches RawDetection's declared type everywhere else.
-  return data.detections.map((detection) => ({
-    ...detection,
-    specialistText: detection.specialistText ?? undefined,
-    relativeTimestamp: detection.relativeTimestamp ?? undefined,
-  }));
+  // The backend serializes an absent optional field as JSON null, but
+  // RawDetection's optional fields must be omitted entirely (not set to
+  // undefined) under exactOptionalPropertyTypes, so drop nullish ones here.
+  return data.detections.map((detection) => {
+    const { specialistText, relativeTimestamp, ...rest } = detection;
+    return {
+      ...rest,
+      ...(specialistText != null ? { specialistText } : {}),
+      ...(relativeTimestamp != null ? { relativeTimestamp } : {}),
+    };
+  });
 }
