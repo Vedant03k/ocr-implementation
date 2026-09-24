@@ -104,6 +104,21 @@ ocr-implementation/
 - [x] UI for uploading images/video and viewing results — `web/` (merged from `dev-amrita`) wired to the real backend (see §10); browser-tested end-to-end, including live threshold re-routing
 - [ ] Validated against real handwriting samples (only tested on a synthetic printed-text image so far)
 
+## 8. Running the pipeline (CLI)
+
+Run from the repo root, with `src` on the Python path (since `ocr_pipeline` lives under `src/`):
+
+```powershell
+$env:PYTHONPATH = "src"
+.venv\Scripts\python.exe -m ocr_pipeline.main path\to\input.jpg --output result.json
+```
+
+`--config` defaults to `config/config.yaml`; pass a different path with `--config path\to\other.yaml`.
+
+## 9. Known design trade-off: detector/recognizer split
+
+The README's architecture diagram shows detection and fast-path recognition as separate stages. In practice, PaddleOCR 3.x/PaddleX has no standalone detection-only call at the level this pipeline uses — one `predict()` call runs detection and first-pass recognition together. `detector.py` runs that fused call; `recognizer_fast.py` reads the recognition it already produced instead of invoking PaddleOCR's recognizer a second time (which would duplicate work for no benefit). The module boundary from the architecture is kept, but both are backed by the same underlying call — documented in each file's docstring.
+
 ## 10. Web GUI integration
 
 `web/` (merged from `dev-amrita`) originally ran entirely on mock data — a static fixture array plus a client-side simulated progress animation, with no backend call at all. Wired it to the real pipeline:
@@ -136,17 +151,16 @@ Open `http://localhost:3000`, upload an image or video, and results come from th
 - The cosmetic stage-progress animation (frame-sampling/detection/recognition/merging bars) runs on a fixed ~3–4s timer unrelated to real backend latency; for a slow request the bars will sit at 100% while still waiting on the actual response. No real progress streaming (SSE/WebSocket) is wired up yet.
 - Only browser-tested against a single synthetic printed-text image (both the fast path and forced escalation) — not yet tried against a real photo, a real video, or real handwriting.
 
-## 8. Running the pipeline
+## 11. LLM cleanup stage (spelling/OCR-error correction)
 
-Run from the repo root, with `src` on the Python path (since `ocr_pipeline` lives under `src/`):
+Real handwriting testing (a photo of handwritten notes) surfaced OCR misreads GOT-OCR2.0's raw output didn't catch: "seaules infrasture fir" instead of "seamless infrastructure for", "unauthclized" instead of "unauthorized", etc. Added an optional post-recognition cleanup stage using a small instruction-tuned LLM (Qwen2.5-1.5B-Instruct, downloaded to `models/llm_cleanup` — see `scripts/download_models.py`).
 
-```powershell
-$env:PYTHONPATH = "src"
-.venv\Scripts\python.exe -m ocr_pipeline.main path\to\input.jpg --output result.json
-```
+- **`src/ocr_pipeline/cleanup.py`** — `TextCleaner.clean_lines(lines: list[str]) -> list[str]`. Corrects a whole document's lines **in one call**, not line-by-line: the lines are numbered in the prompt so the model can use neighboring lines as context. This matters — a line cut mid-phrase by the line detector (e.g. "fir" from "...infrasture fir\nour Industry...") is genuinely ambiguous alone (could be "for" or "fire"), and only resolves correctly with the next line's context. Falls back to returning the original lines unchanged if the model's output doesn't parse back to the exact same line count — a structural safety net against the model merging, dropping, or reordering lines.
+- **Prompt-engineering iteration that mattered**: an early per-line version (clean each box's text independently) actively made things worse — it dropped words, invented synonyms ("given" → "granted" on a correctly-read word), and lost quote marks. Moving to whole-document + few-shot examples (including explicit examples of lines that must stay unchanged, keep lowercase, and keep quotes) fixed most of that. It's still not perfect on a 1.5B model — occasional residual typos or a dropped punctuation mark — so treat it as "usually helpful," not authoritative.
+- **`schema.py`** — `TextBlock.cleaned_text: str | None`, alongside the original `text` (never overwritten).
+- **`main.py`** (CLI) — one `clean_lines()` call across all of a run's blocks, after merge.
+- **`api.py`** (GUI) — two `clean_lines()` calls per frame, one over all `candidateText` values and one over all `specialistText` values (kept separate since they describe the same lines via two different recognizers, not sequential content) — consistent with the "compute both paths regardless of threshold" GUI-only shortcut described in §10.
+- **Frontend**: `OcrBox.cleanedText` / `RawDetection.cleanedCandidateText` + `cleanedSpecialistText`, routed the same way `text` already is (`ocr-routing.ts`). `results-view.tsx` adds a "Show corrected text" checkbox (visible only when at least one box actually has cleaned text) that swaps every box's displayed `text` for its `cleanedText` — one lifted toggle, so the overlay tooltip, box detail panel, export, and copy panel all update together without each needing separate wiring.
+- Config: `llm_cleanup.enabled` in `config.yaml` (default `true`) turns the whole stage off with no code changes if it's not wanted.
 
-`--config` defaults to `config/config.yaml`; pass a different path with `--config path\to\other.yaml`.
-
-## 9. Known design trade-off: detector/recognizer split
-
-The README's architecture diagram shows detection and fast-path recognition as separate stages. In practice, PaddleOCR 3.x/PaddleX has no standalone detection-only call at the level this pipeline uses — one `predict()` call runs detection and first-pass recognition together. `detector.py` runs that fused call; `recognizer_fast.py` reads the recognition it already produced instead of invoking PaddleOCR's recognizer a second time (which would duplicate work for no benefit). The module boundary from the architecture is kept, but both are backed by the same underlying call — documented in each file's docstring.
+Browser-verified: uploaded an image reading "Helo Wrold 123", confirmed the "Recognized text" panel shows "Hello World 123" with the toggle on and the raw "Helo Wrold 123" with it off, no console errors.

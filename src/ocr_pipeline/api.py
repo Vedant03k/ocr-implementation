@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .cleanup import TextCleaner
 from .detector import PaddleDetector
 from .frame_sampler import sample_frames
 from .main import VIDEO_EXTENSIONS, load_config
@@ -16,6 +17,10 @@ from .utils import crop_polygon
 config = load_config(os.environ.get("OCR_CONFIG", "config/config.yaml"))
 detector = PaddleDetector(lang=config["paddleocr"]["lang"], device=config["paddleocr"].get("device", "cpu"))
 specialist = GotOcrRecognizer(model_dir=config["got_ocr2"]["model_dir"], device=config["got_ocr2"].get("device"))
+_cleanup_cfg = config.get("llm_cleanup", {})
+cleaner = (
+    TextCleaner(_cleanup_cfg["model_dir"], _cleanup_cfg.get("device")) if _cleanup_cfg.get("enabled") else None
+)
 
 app = FastAPI()
 app.add_middleware(
@@ -34,6 +39,8 @@ class RawDetectionOut(BaseModel):
     h: float
     candidateText: str
     specialistText: str | None = None
+    cleanedCandidateText: str | None = None
+    cleanedSpecialistText: str | None = None
     rawConfidence: float
     relativeTimestamp: float | None = None
 
@@ -49,10 +56,18 @@ def _detections_for_frame(
     # as the real pipeline does), this always runs GOT-OCR2.0 too, so the GUI's
     # threshold slider can re-route results live without re-running the backend.
     height, width = image.shape[:2]
+    detections = detector.detect(image)
+    candidate_texts = [det.text for det in detections]
+    specialist_texts = [specialist.recognize(crop_polygon(image, det.poly)) for det in detections]
+
+    # Cleaned as two whole-frame passes (not per box) so the model has each
+    # line's neighbors as context — see cleanup.py's docstring for why that
+    # matters for disambiguating a line cut mid-phrase by the line detector.
+    cleaned_candidates = cleaner.clean_lines(candidate_texts) if cleaner and candidate_texts else None
+    cleaned_specialists = cleaner.clean_lines(specialist_texts) if cleaner and specialist_texts else None
+
     out = []
-    for i, det in enumerate(detector.detect(image)):
-        crop = crop_polygon(image, det.poly)
-        specialist_text = specialist.recognize(crop)
+    for i, det in enumerate(detections):
         out.append(
             RawDetectionOut(
                 id=f"{prefix}-{i}",
@@ -60,8 +75,10 @@ def _detections_for_frame(
                 y=det.box.y1 / height,
                 w=(det.box.x2 - det.box.x1) / width,
                 h=(det.box.y2 - det.box.y1) / height,
-                candidateText=det.text,
-                specialistText=specialist_text,
+                candidateText=candidate_texts[i],
+                specialistText=specialist_texts[i],
+                cleanedCandidateText=cleaned_candidates[i] if cleaned_candidates else None,
+                cleanedSpecialistText=cleaned_specialists[i] if cleaned_specialists else None,
                 rawConfidence=det.score,
                 relativeTimestamp=relative_timestamp,
             )

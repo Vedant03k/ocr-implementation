@@ -25,10 +25,13 @@ export async function fetchDetections(file: File, signal: AbortSignal): Promise<
   // RawDetection's optional fields must be omitted entirely (not set to
   // undefined) under exactOptionalPropertyTypes, so drop nullish ones here.
   return data.detections.map((detection) => {
-    const { specialistText, relativeTimestamp, ...rest } = detection;
+    const { specialistText, cleanedCandidateText, cleanedSpecialistText, relativeTimestamp, ...rest } =
+      detection;
     return {
       ...rest,
       ...(specialistText != null ? { specialistText } : {}),
+      ...(cleanedCandidateText != null ? { cleanedCandidateText } : {}),
+      ...(cleanedSpecialistText != null ? { cleanedSpecialistText } : {}),
       ...(relativeTimestamp != null ? { relativeTimestamp } : {}),
     };
   });

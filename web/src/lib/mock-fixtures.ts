@@ -11,6 +11,9 @@ export interface RawDetection {
   h: number;
   candidateText: string;
   specialistText?: string;
+  /** LLM-corrected versions of candidateText/specialistText, when the cleanup stage is enabled. */
+  cleanedCandidateText?: string;
+  cleanedSpecialistText?: string;
   rawConfidence: number;
   /** Video only: position in the mock timeline, normalized 0-1. */
   relativeTimestamp?: number;

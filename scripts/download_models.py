@@ -20,9 +20,18 @@ def download_got_ocr2():
     )
 
 
+def download_llm_cleanup():
+    snapshot_download(
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        local_dir=os.path.join(MODELS_DIR, "llm_cleanup"),
+    )
+
+
 if __name__ == "__main__":
     print("Downloading PaddleOCR weights...")
     download_paddleocr()
     print("Downloading GOT-OCR2.0 weights...")
     download_got_ocr2()
+    print("Downloading LLM cleanup weights...")
+    download_llm_cleanup()
     print("Done.")

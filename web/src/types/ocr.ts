@@ -13,6 +13,8 @@ export interface OcrBox {
   confidence: number;
   model: OcrModel;
   timestamp?: number;
+  /** LLM-corrected version of `text` (spelling/OCR-error fixes only), when the cleanup stage is enabled. */
+  cleanedText?: string;
 }
 
 export interface OcrResult {

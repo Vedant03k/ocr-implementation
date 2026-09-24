@@ -4,6 +4,7 @@ import os
 import cv2
 import yaml
 
+from .cleanup import TextCleaner
 from .detector import PaddleDetector
 from .frame_sampler import sample_frames
 from .merge import merge_and_reorder
@@ -27,6 +28,13 @@ def run(input_path: str, config: dict) -> OCRResult:
     )
     threshold = config["router"]["confidence_threshold"]
 
+    cleanup_cfg = config.get("llm_cleanup", {})
+    cleaner = (
+        TextCleaner(cleanup_cfg["model_dir"], cleanup_cfg.get("device"))
+        if cleanup_cfg.get("enabled")
+        else None
+    )
+
     blocks = []
     if os.path.splitext(input_path)[1].lower() in VIDEO_EXTENSIONS:
         sampler_cfg = config["frame_sampler"]
@@ -47,6 +55,13 @@ def run(input_path: str, config: dict) -> OCRResult:
         detections = detector.detect(image)
         routed = route(image, detections, specialist, threshold)
         blocks.extend(merge_and_reorder(routed))
+
+    if cleaner is not None and blocks:
+        cleaned_texts = cleaner.clean_lines([block.text for block in blocks])
+        blocks = [
+            block.model_copy(update={"cleaned_text": cleaned_text})
+            for block, cleaned_text in zip(blocks, cleaned_texts)
+        ]
 
     return OCRResult(blocks=blocks)
 

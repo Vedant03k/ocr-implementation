@@ -7,6 +7,11 @@ got_ocr2:
   model_dir: models/got_ocr2
   device: cuda   # falls back to cpu if unavailable
 
+llm_cleanup:
+  enabled: true
+  model_dir: models/llm_cleanup
+  device: cuda   # falls back to cpu if unavailable
+
 router:
   confidence_threshold: 0.85
 

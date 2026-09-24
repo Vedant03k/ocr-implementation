@@ -27,6 +27,10 @@ export function routeDetections(
       ? Math.min(SPECIALIST_CONFIDENCE_CAP, detection.rawConfidence + SPECIALIST_CONFIDENCE_BOOST)
       : detection.rawConfidence;
 
+    const cleanedText = escalate
+      ? detection.cleanedSpecialistText
+      : detection.cleanedCandidateText;
+
     const box: OcrBox = {
       id: detection.id,
       x: detection.x,
@@ -37,6 +41,10 @@ export function routeDetections(
       confidence,
       model,
     };
+
+    if (cleanedText !== undefined) {
+      box.cleanedText = cleanedText;
+    }
 
     if (detection.relativeTimestamp !== undefined) {
       box.timestamp =
