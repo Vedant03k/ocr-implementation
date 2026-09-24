@@ -1,0 +1,253 @@
+/**
+ * Simulated PaddleOCR detector+recognizer output. `rawConfidence` is what the fast path
+ * reported; `specialistText` is what GOT-OCR2.0 would produce if a crop escalates. Real
+ * boxes are normalized (0-1) so they overlay on whatever media the user uploads.
+ */
+export interface RawDetection {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  candidateText: string;
+  specialistText?: string;
+  /** LLM-corrected versions of candidateText/specialistText, when the cleanup stage is enabled. */
+  cleanedCandidateText?: string;
+  cleanedSpecialistText?: string;
+  rawConfidence: number;
+  /** Video only: position in the mock timeline, normalized 0-1. */
+  relativeTimestamp?: number;
+}
+
+export const IMAGE_DETECTIONS: RawDetection[] = [
+  {
+    id: "b1",
+    x: 0.08,
+    y: 0.06,
+    w: 0.5,
+    h: 0.055,
+    candidateText: "Invoice #4471 — Riverland Supply Co.",
+    rawConfidence: 0.97,
+  },
+  {
+    id: "b2",
+    x: 0.08,
+    y: 0.14,
+    w: 0.32,
+    h: 0.04,
+    candidateText: "Date: 03/14/2026",
+    rawConfidence: 0.95,
+  },
+  {
+    id: "b3",
+    x: 0.08,
+    y: 0.2,
+    w: 0.38,
+    h: 0.04,
+    candidateText: "Bill to: Marcus Chen",
+    rawConfidence: 0.93,
+  },
+  {
+    id: "b4",
+    x: 0.08,
+    y: 0.3,
+    w: 0.6,
+    h: 0.045,
+    candidateText: "10x Galvanized pipe fitting, 2in",
+    rawConfidence: 0.91,
+  },
+  {
+    id: "b5",
+    x: 0.08,
+    y: 0.36,
+    w: 0.46,
+    h: 0.045,
+    candidateText: "6x Brass valve assembly",
+    rawConfidence: 0.88,
+  },
+  {
+    id: "b6",
+    x: 0.08,
+    y: 0.46,
+    w: 0.62,
+    h: 0.06,
+    candidateText: "pls rush this one — job site closes fri",
+    specialistText: "please rush this one — job site closes Friday",
+    rawConfidence: 0.41,
+  },
+  {
+    id: "b7",
+    x: 0.08,
+    y: 0.55,
+    w: 0.5,
+    h: 0.06,
+    candidateText: "call me if delayd, Marcus",
+    specialistText: "call me if delayed, Marcus",
+    rawConfidence: 0.37,
+  },
+  {
+    id: "b8",
+    x: 0.08,
+    y: 0.66,
+    w: 0.28,
+    h: 0.045,
+    candidateText: "Subtotal: $842.00",
+    rawConfidence: 0.96,
+  },
+  {
+    id: "b9",
+    x: 0.08,
+    y: 0.72,
+    w: 0.28,
+    h: 0.045,
+    candidateText: "Tax: $67.36",
+    rawConfidence: 0.94,
+  },
+  {
+    id: "b10",
+    x: 0.08,
+    y: 0.78,
+    w: 0.32,
+    h: 0.05,
+    candidateText: "Total: $909.36",
+    rawConfidence: 0.97,
+  },
+  {
+    id: "b11",
+    x: 0.08,
+    y: 0.87,
+    w: 0.55,
+    h: 0.06,
+    candidateText: "recvd by J.T. — ok to ship",
+    specialistText: "received by J.T. — OK to ship",
+    rawConfidence: 0.52,
+  },
+  { id: "b12", x: 0.62, y: 0.06, w: 0.3, h: 0.08, candidateText: "PAID", rawConfidence: 0.65 },
+];
+
+export const VIDEO_DETECTIONS: RawDetection[] = [
+  {
+    id: "v1",
+    x: 0.05,
+    y: 0.82,
+    w: 0.4,
+    h: 0.08,
+    candidateText: "SCENE 04 — WAREHOUSE FLOOR",
+    rawConfidence: 0.94,
+    relativeTimestamp: 0,
+  },
+  {
+    id: "v2",
+    x: 0.5,
+    y: 0.1,
+    w: 0.35,
+    h: 0.07,
+    candidateText: "Aisle 12 — Fasteners",
+    rawConfidence: 0.92,
+    relativeTimestamp: 0.06,
+  },
+  {
+    id: "v3",
+    x: 0.1,
+    y: 0.4,
+    w: 0.5,
+    h: 0.09,
+    candidateText: "restck by frday - low on m8 bolts",
+    specialistText: "restock by Friday - low on M8 bolts",
+    rawConfidence: 0.44,
+    relativeTimestamp: 0.16,
+  },
+  {
+    id: "v4",
+    x: 0.08,
+    y: 0.82,
+    w: 0.42,
+    h: 0.08,
+    candidateText: "SCENE 05 — LOADING DOCK",
+    rawConfidence: 0.93,
+    relativeTimestamp: 0.27,
+  },
+  {
+    id: "v5",
+    x: 0.55,
+    y: 0.15,
+    w: 0.3,
+    h: 0.06,
+    candidateText: "Dock 3",
+    rawConfidence: 0.96,
+    relativeTimestamp: 0.33,
+  },
+  {
+    id: "v6",
+    x: 0.12,
+    y: 0.55,
+    w: 0.55,
+    h: 0.09,
+    candidateText: "chk pallet wt b4 loading",
+    specialistText: "check pallet weight before loading",
+    rawConfidence: 0.39,
+    relativeTimestamp: 0.42,
+  },
+  {
+    id: "v7",
+    x: 0.1,
+    y: 0.82,
+    w: 0.45,
+    h: 0.08,
+    candidateText: "SCENE 06 — OFFICE WHITEBOARD",
+    rawConfidence: 0.91,
+    relativeTimestamp: 0.55,
+  },
+  {
+    id: "v8",
+    x: 0.1,
+    y: 0.2,
+    w: 0.6,
+    h: 0.1,
+    candidateText: "Q2 targets: +14% throughput",
+    rawConfidence: 0.9,
+    relativeTimestamp: 0.62,
+  },
+  {
+    id: "v9",
+    x: 0.1,
+    y: 0.35,
+    w: 0.65,
+    h: 0.1,
+    candidateText: "hire 2 more forklift ops asap!!",
+    specialistText: "hire 2 more forklift operators ASAP!!",
+    rawConfidence: 0.48,
+    relativeTimestamp: 0.71,
+  },
+  {
+    id: "v10",
+    x: 0.1,
+    y: 0.5,
+    w: 0.4,
+    h: 0.08,
+    candidateText: "review w/ Marcus - tues 9am",
+    specialistText: "review w/ Marcus - Tues 9am",
+    rawConfidence: 0.55,
+    relativeTimestamp: 0.8,
+  },
+  {
+    id: "v11",
+    x: 0.05,
+    y: 0.82,
+    w: 0.4,
+    h: 0.08,
+    candidateText: "SCENE 07 — EXIT SIGNAGE",
+    rawConfidence: 0.95,
+    relativeTimestamp: 0.9,
+  },
+  {
+    id: "v12",
+    x: 0.3,
+    y: 0.25,
+    w: 0.4,
+    h: 0.12,
+    candidateText: "EMERGENCY EXIT",
+    rawConfidence: 0.98,
+    relativeTimestamp: 0.97,
+  },
+];

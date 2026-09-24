@@ -1,0 +1,21 @@
+paddleocr:
+  # Weights cache to models/paddleocr via PADDLE_PDX_CACHE_HOME (set in ocr_pipeline/__init__.py).
+  lang: en
+  device: cpu   # set to gpu / gpu:0 if paddlepaddle-gpu is installed instead of paddlepaddle
+
+got_ocr2:
+  model_dir: models/got_ocr2
+  device: cuda   # falls back to cpu if unavailable
+
+llm_cleanup:
+  enabled: true
+  model_dir: models/llm_cleanup
+  device: cuda   # falls back to cpu if unavailable
+
+router:
+  confidence_threshold: 0.85
+
+frame_sampler:
+  mode: fps   # fps | scene_change
+  fps: 1
+  dedupe_similarity_threshold: 0.97

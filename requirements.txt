@@ -1,0 +1,23 @@
+# Fast path: text detection + printed-text recognition
+paddlepaddle==3.3.1
+paddleocr==3.7.0
+
+# Specialist path: handwriting recognition
+# torch must be installed from the CUDA wheel index for GPU support:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+transformers
+accelerate
+huggingface_hub
+tiktoken
+verovio
+
+# Pipeline glue
+pydantic
+opencv-python
+pyyaml
+
+# API server (web/ frontend integration)
+fastapi
+uvicorn
+python-multipart
