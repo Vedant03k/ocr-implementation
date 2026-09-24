@@ -3,6 +3,7 @@ models/
 config/
 scripts/
 tests/
+deploy/
 .venv/
 requirements.txt
 STEPS_TO_DEVELOP.md

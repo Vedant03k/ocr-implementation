@@ -1,0 +1,59 @@
+# eksctl create cluster -f deploy/eks/cluster.yaml
+#
+# Two node groups: a cheap CPU one for PaddleOCR + the orchestrator, and a
+# GPU one (g4dn.xlarge — cheapest current-gen GPU instance with enough VRAM
+# for GOT-OCR2.0 + Qwen2.5-1.5B, 16GB) for the two heavy models. The GPU
+# group starts at 0 and scales up on demand via Cluster Autoscaler, since
+# g4dn instances aren't cheap to leave idle.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ocr-pipeline
+  region: us-east-1 # change to your preferred region
+  version: "1.31"
+
+iam:
+  withOIDC: true # required for the Cluster Autoscaler and S3-access IAM roles below
+
+managedNodeGroups:
+  - name: cpu-workers
+    instanceType: m5.large
+    minSize: 1
+    maxSize: 4
+    desiredCapacity: 2
+    labels:
+      workload: cpu
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+
+  - name: gpu-workers
+    instanceType: g4dn.xlarge
+    minSize: 0
+    maxSize: 3
+    desiredCapacity: 0 # scales up on first GPU pod, via Cluster Autoscaler
+    labels:
+      workload: gpu
+      nvidia.com/gpu.present: "true" # matched by the KServe manifests' nodeSelector
+    taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+
+# After cluster creation, still needed (not covered by this config):
+#   1. NVIDIA device plugin, so the GPU node group actually exposes the
+#      nvidia.com/gpu resource:
+#        kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
+#   2. Cluster Autoscaler, so the GPU group can scale 0 -> N and back:
+#        https://docs.aws.amazon.com/eks/latest/userguide/autoscaling.html
+#   3. Kubeflow/KServe itself (this config only creates the cluster, not
+#      Kubeflow) — see https://github.com/kserve/kserve#installation for a
+#      standalone KServe install (Kubeflow's full stack isn't required just
+#      to use KServe).
+#   4. An IAM policy on the node role (or IRSA service account) granting
+#      S3 read access to the bucket holding models/, for the
+#      storage-initializer init containers.

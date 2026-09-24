@@ -1,8 +1,6 @@
 import re
 
-import torch
-
-_SYSTEM_PROMPT = """You correct OCR misreads in numbered lines of text, using neighboring lines as context to resolve ambiguous words. Follow these rules exactly:
+CLEANUP_SYSTEM_PROMPT = """You correct OCR misreads in numbered lines of text, using neighboring lines as context to resolve ambiguous words. Follow these rules exactly:
 1. Fix only clear spelling/OCR errors (garbled, misspelled, or wrongly-split words).
 2. Never replace a correctly-spelled word with a different word, even a synonym. Only touch words that are actually misspelled or garbled.
 3. Never add, remove, merge, split, or reorder lines. Output exactly the same number of lines, in the same order.
@@ -35,6 +33,27 @@ Note in the example: line 5 keeps its quote marks, line 7 stays lowercase becaus
 _LINE_PATTERN = re.compile(r"^\s*(\d+)\.\s?(.*)$")
 
 
+def build_numbered_input(lines: list[str]) -> str:
+    return "\n".join(f"{i + 1}. {line}" for i, line in enumerate(lines))
+
+
+def parse_numbered_lines(output: str, expected: int) -> list[str] | None:
+    """Parses "N. text" lines back into an ordered list, or None if the model's
+    output doesn't contain exactly one line per expected index — callers should
+    fall back to the original input rather than risk dropped/merged content."""
+    result: dict[int, str] = {}
+    for raw_line in output.strip().splitlines():
+        match = _LINE_PATTERN.match(raw_line)
+        if not match:
+            continue
+        index = int(match.group(1))
+        result[index] = match.group(2)
+
+    if len(result) != expected or set(result) != set(range(1, expected + 1)):
+        return None
+    return [result[i] for i in range(1, expected + 1)]
+
+
 class TextCleaner:
     """Small instruction-tuned LLM that corrects OCR typos across a document's lines.
 
@@ -44,9 +63,15 @@ class TextCleaner:
     while still constraining it to preserve line count and order. Falls back
     to the original lines unchanged if the model doesn't return a matching
     line count, rather than risk silently dropping or merging content.
+
+    For an in-process (single-machine) deployment only. The Kubeflow/KServe
+    deployment (deploy/) calls a remote vLLM-backed service instead and reuses
+    CLEANUP_SYSTEM_PROMPT/build_numbered_input/parse_numbered_lines directly,
+    without needing torch/transformers installed in the orchestrator's image.
     """
 
     def __init__(self, model_dir: str, device: str | None = None):
+        import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         if device is None or (device.startswith("cuda") and not torch.cuda.is_available()):
@@ -59,10 +84,9 @@ class TextCleaner:
         if not any(line.strip() for line in lines):
             return list(lines)
 
-        numbered_input = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(lines))
         messages = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": numbered_input},
+            {"role": "system", "content": CLEANUP_SYSTEM_PROMPT},
+            {"role": "user", "content": build_numbered_input(lines)},
         ]
         prompt = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
@@ -77,19 +101,5 @@ class TextCleaner:
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
-        parsed = self._parse_numbered(output, expected=len(lines))
+        parsed = parse_numbered_lines(output, expected=len(lines))
         return parsed if parsed is not None else list(lines)
-
-    @staticmethod
-    def _parse_numbered(output: str, expected: int) -> list[str] | None:
-        result: dict[int, str] = {}
-        for raw_line in output.strip().splitlines():
-            match = _LINE_PATTERN.match(raw_line)
-            if not match:
-                continue
-            index = int(match.group(1))
-            result[index] = match.group(2)
-
-        if len(result) != expected or set(result) != set(range(1, expected + 1)):
-            return None
-        return [result[i] for i in range(1, expected + 1)]

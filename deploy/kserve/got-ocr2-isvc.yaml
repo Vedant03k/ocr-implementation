@@ -1,0 +1,57 @@
+# GOT-OCR2.0: custom predictor, GPU. Weights (~1.1GB) are NOT baked into the
+# image — an explicit init container pulls them from S3 into an emptyDir
+# shared with the main container at pod startup, using KServe's standalone
+# storage-initializer image. (We use an explicit init container rather than
+# KServe's automatic storageUri-on-custom-containers wiring, since that
+# wiring varies across KServe versions — this pattern is version-independent
+# and easy to verify with `kubectl describe pod`.)
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: got-ocr2
+  namespace: ocr-pipeline
+spec:
+  predictor:
+    minReplicas: 0 # scales to zero when idle — GPU nodes are expensive
+    maxReplicas: 3
+    scaleTarget: 5
+    scaleMetric: concurrency
+    nodeSelector:
+      nvidia.com/gpu.present: "true" # matches the GPU node group's label, see deploy/eks/cluster.yaml
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    initContainers:
+      - name: fetch-weights
+        image: kserve/storage-initializer:latest
+        args:
+          - s3://<BUCKET>/models/got_ocr2/ # replace <BUCKET>
+          - /mnt/models
+        volumeMounts:
+          - name: model-store
+            mountPath: /mnt/models
+    containers:
+      - name: kserve-container
+        image: <ECR_REPO>/got-ocr2:latest # replace after `docker push`
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        env:
+          - name: GOT_OCR2_MODEL_DIR
+            value: /mnt/models
+        volumeMounts:
+          - name: model-store
+            mountPath: /mnt/models
+        resources:
+          requests:
+            cpu: "2"
+            memory: 6Gi
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "4"
+            memory: 10Gi
+            nvidia.com/gpu: "1"
+    volumes:
+      - name: model-store
+        emptyDir: {}

@@ -1,0 +1,45 @@
+# LLM cleanup (Qwen2.5-1.5B-Instruct): KServe's built-in HuggingFace
+# ServingRuntime with the vLLM backend, instead of a custom container — this
+# is the model that most benefits from a real LLM-serving engine (continuous
+# batching, paged attention) rather than raw transformers.generate(), which
+# is what the local dev setup (src/ocr_pipeline/cleanup.py) uses.
+#
+# Requires the huggingfaceserver ClusterServingRuntime (ships with a
+# standard KServe install) to be present in the cluster. Field/arg names
+# here match KServe's documented HF+vLLM pattern as of writing — verify
+# against the installed KServe version with `kubectl explain
+# inferenceservice.spec.predictor.model` before applying, since this API has
+# evolved across KServe releases and hasn't been validated against a live
+# cluster from this repo.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llm-cleanup
+  namespace: ocr-pipeline
+spec:
+  predictor:
+    minReplicas: 0
+    maxReplicas: 2
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    model:
+      modelFormat:
+        name: huggingface
+      storageUri: s3://<BUCKET>/models/llm_cleanup/ # replace <BUCKET>
+      args:
+        - --backend=vllm
+        - --dtype=float16
+        - --max-model-len=2048
+      resources:
+        requests:
+          cpu: "4"
+          memory: 12Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 16Gi
+          nvidia.com/gpu: "1"

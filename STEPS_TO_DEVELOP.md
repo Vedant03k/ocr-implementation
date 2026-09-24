@@ -164,3 +164,11 @@ Real handwriting testing (a photo of handwritten notes) surfaced OCR misreads GO
 - Config: `llm_cleanup.enabled` in `config.yaml` (default `true`) turns the whole stage off with no code changes if it's not wanted.
 
 Browser-verified: uploaded an image reading "Helo Wrold 123", confirmed the "Recognized text" panel shows "Hello World 123" with the toggle on and the raw "Helo Wrold 123" with it off, no console errors.
+
+## 12. AWS EKS + KServe deployment (written, not yet applied)
+
+Splits the single-process local backend into three independently-scaled KServe `InferenceService`s (PaddleOCR, GOT-OCR2.0, LLM cleanup via vLLM) plus a thin orchestrator that calls them over HTTP — full detail, build/push/apply commands, and the reasoning behind each design choice in [deploy/README.md](deploy/README.md).
+
+- **Two changes made to the shared `ocr_pipeline` package to support this**: the Windows torch-import-DLL-workaround in `__init__.py` is now gated behind `sys.platform == "win32"` (it's a Windows-only bug — forcing it on Linux would drag torch into the lightweight PaddleOCR-only container for no reason), and `cleanup.py` now exports `CLEANUP_SYSTEM_PROMPT`/`build_numbered_input`/`parse_numbered_lines` as top-level functions (not just inside `TextCleaner`), so the orchestrator can call the remote vLLM service with the exact same prompt and parsing logic without needing torch/transformers installed at all.
+- **Not yet validated against a live cluster** — no EKS cluster exists to test against from this repo. The KServe manifests (especially `llm-cleanup-isvc.yaml`'s HuggingFace+vLLM runtime fields) should be checked with `kubectl apply --dry-run=server` against the actual installed KServe version before applying for real; that API has changed across KServe releases.
+- Local dev (`src/ocr_pipeline/api.py`, single process, all three models in memory) is untouched and still what `npm run dev` + local `uvicorn` uses — this is an additional deployment path, not a replacement.

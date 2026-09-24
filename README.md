@@ -45,4 +45,4 @@ Implemented and browser-tested end-to-end, including against a real photo of han
 - [x] LLM cleanup pass for OCR typos
 - [x] UI for uploading images/video and viewing results
 - [ ] Scene-change frame sampling mode
-- [ ] Kubeflow/KServe deployment for real-time inference
+- [ ] AWS EKS + KServe deployment applied to a real cluster (manifests written in [deploy/](deploy/README.md), not yet applied — no cluster to test against yet)
