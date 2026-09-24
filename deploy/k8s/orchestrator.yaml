@@ -1,0 +1,64 @@
+# The orchestrator is a plain FastAPI app (not a "model"), so it's a regular
+# Deployment/Service/HPA rather than a KServe InferenceService.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: ocr-pipeline
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/orchestrator:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            # In-cluster KServe DNS names, once the InferenceServices below are applied.
+            - name: PADDLEOCR_URL
+              value: http://paddleocr-predictor.ocr-pipeline.svc.cluster.local/v1/models/paddleocr:predict
+            - name: GOT_OCR2_URL
+              value: http://got-ocr2-predictor.ocr-pipeline.svc.cluster.local/v1/models/got-ocr2:predict
+            - name: LLM_CLEANUP_URL
+              value: http://llm-cleanup-predictor.ocr-pipeline.svc.cluster.local/v1/models/llm-cleanup:predict
+            - name: OCR_CORS_ORIGINS
+              value: "*" # TODO: tighten to the real Vercel URL once NEXT_PUBLIC_OCR_API_URL is set
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: ocr-pipeline
+  annotations:
+    # Default Classic ELB idle timeout is 60s, which the CPU-fallback
+    # got-ocr2/llm-cleanup path (see deploy/README.md) regularly exceeds —
+    # requests were getting silently killed mid-flight ("empty reply from
+    # server") even after fixing the orchestrator's own httpx timeout.
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "300"
+spec:
+  selector:
+    app: orchestrator
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: LoadBalancer # provisions a Classic ELB (no AWS Load Balancer Controller installed); swap for ClusterIP + Ingress if you front it with one

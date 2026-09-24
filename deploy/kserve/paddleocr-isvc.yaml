@@ -1,0 +1,28 @@
+# PaddleOCR: custom predictor, CPU-only, weights baked into the image (see
+# deploy/docker/paddleocr.Dockerfile) since they're small and don't need a GPU
+# node's storage-initializer step.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: paddleocr
+  namespace: ocr-pipeline
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 5
+    containers:
+      - name: kserve-container
+        image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/paddleocr:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi

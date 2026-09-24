@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+httpx
+opencv-python-headless
+numpy
+pydantic

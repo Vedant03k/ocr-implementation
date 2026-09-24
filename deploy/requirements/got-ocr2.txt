@@ -1,0 +1,9 @@
+torch
+transformers
+accelerate
+opencv-python-headless
+numpy
+pydantic
+pyyaml
+kserve
+pillow
