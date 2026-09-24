@@ -1,0 +1,67 @@
+<svg width="980" height="360" viewBox="0 0 980 360" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>Web app architecture: browser, FastAPI backend, OCR pipeline</title>
+<desc>The Next.js browser GUI uploads an image or video to the FastAPI backend, which runs it through the OCR pipeline (PaddleOCR detection/recognition, GOT-OCR2.0 escalation, merge, LLM cleanup) and returns JSON, which the browser renders as bounding boxes and recognized text.</desc>
+
+<defs>
+  <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#5f5e5a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<style>
+  .box { stroke-width: 0.5; rx: 4; }
+  .gray  { fill: #F1EFE8; stroke: #5F5E5A; }
+  .purple{ fill: #EEEDFE; stroke: #534AB7; }
+  .blue  { fill: #E5F0FE; stroke: #1D4E99; }
+  .th { font-size: 14px; font-weight: 600; }
+  .ts { font-size: 12px; }
+  .tl { font-size: 11px; }
+  .tgray { fill: #2C2C2A; }
+  .tpurple { fill: #26215C; }
+  .tblue { fill: #0C2C57; }
+  .arr { stroke: #5f5e5a; stroke-width: 1.5; fill: none; }
+  .lbl { fill: #5F5E5A; }
+</style>
+
+<!-- request flow (top arrows, left to right) -->
+<line class="arr" x1="230" y1="140" x2="330" y2="140" marker-end="url(#arrow2)"/>
+<text x="280" y="128" text-anchor="middle" class="tl lbl">1. Upload file</text>
+
+<line class="arr" x1="590" y1="140" x2="690" y2="140" marker-end="url(#arrow2)"/>
+<text x="640" y="128" text-anchor="middle" class="tl lbl">2. Runs pipeline</text>
+
+<!-- response flow (bottom arrows, right to left) -->
+<line class="arr" x1="690" y1="220" x2="590" y2="220" marker-end="url(#arrow2)"/>
+<text x="640" y="245" text-anchor="middle" class="tl lbl">3. Text blocks + boxes</text>
+
+<line class="arr" x1="330" y1="220" x2="230" y2="220" marker-end="url(#arrow2)"/>
+<text x="280" y="245" text-anchor="middle" class="tl lbl">4. JSON response</text>
+
+<g>
+  <rect class="box gray" x="30" y="110" width="200" height="140"/>
+  <text x="130" y="150" text-anchor="middle" class="th tgray">Browser</text>
+  <text x="130" y="170" text-anchor="middle" class="ts tgray">Next.js web GUI (web/)</text>
+  <text x="130" y="190" text-anchor="middle" class="ts tgray">Upload, bounding-box</text>
+  <text x="130" y="206" text-anchor="middle" class="ts tgray">overlay, recognized</text>
+  <text x="130" y="222" text-anchor="middle" class="ts tgray">text panel</text>
+</g>
+
+<g>
+  <rect class="box purple" x="330" y="110" width="260" height="140"/>
+  <text x="460" y="150" text-anchor="middle" class="th tpurple">FastAPI backend</text>
+  <text x="460" y="170" text-anchor="middle" class="ts tpurple">src/ocr_pipeline/api.py</text>
+  <text x="460" y="190" text-anchor="middle" class="ts tpurple">Loads all models once</text>
+  <text x="460" y="206" text-anchor="middle" class="ts tpurple">at startup, exposes</text>
+  <text x="460" y="222" text-anchor="middle" class="ts tpurple">POST /api/ocr</text>
+</g>
+
+<g>
+  <rect class="box blue" x="690" y="110" width="260" height="140"/>
+  <text x="820" y="150" text-anchor="middle" class="th tblue">OCR pipeline</text>
+  <text x="820" y="170" text-anchor="middle" class="ts tblue">PaddleOCR detect + recognize</text>
+  <text x="820" y="186" text-anchor="middle" class="ts tblue">GOT-OCR2.0 escalation</text>
+  <text x="820" y="202" text-anchor="middle" class="ts tblue">Merge &amp; reorder</text>
+  <text x="820" y="218" text-anchor="middle" class="ts tblue">LLM cleanup</text>
+  <text x="820" y="236" text-anchor="middle" class="tl lbl">(see architecture.svg)</text>
+</g>
+</svg>

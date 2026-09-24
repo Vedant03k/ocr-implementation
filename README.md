@@ -24,6 +24,12 @@ Even a correctly-routed recognition can still misread individual characters ("se
 8. **LLM cleanup** — corrects OCR spelling/typo errors across the merged text, with the original OCR text kept alongside the correction.
 9. **Output** — text + bounding boxes (+ timestamps for video frames) as JSON, plus a web GUI for uploading files and inspecting results.
 
+## Web app architecture
+
+![Web app architecture](docs/web-architecture.svg)
+
+The diagram above is the OCR pipeline itself (a single request's processing steps). Around it: a Next.js browser GUI (`web/`) uploads a file to a FastAPI backend (`src/ocr_pipeline/api.py`), which loads all three models once at startup (not per-request — reloading them per call would add 10s+ to every upload) and runs the pipeline, returning JSON that the browser renders as a bounding-box overlay and a recognized-text panel.
+
 ## Status
 
 Implemented and browser-tested end-to-end, including against a real photo of handwritten notes. See [STEPS_TO_DEVELOP.md](STEPS_TO_DEVELOP.md) for the full setup log, environment gotchas found along the way, and known limitations.
