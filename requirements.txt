@@ -1,0 +1,16 @@
+# Fast path: text detection + printed-text recognition
+paddlepaddle
+paddleocr
+
+# Specialist path: handwriting recognition
+torch
+transformers
+accelerate
+huggingface_hub
+tiktoken
+verovio
+
+# Pipeline glue
+pydantic
+opencv-python
+pyyaml

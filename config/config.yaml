@@ -1,0 +1,16 @@
+paddleocr:
+  # Weights are cached by PaddleX at ~/.paddlex/official_models, not in-repo.
+  lang: en
+  use_gpu: false
+
+got_ocr2:
+  model_dir: models/got_ocr2
+  device: cuda   # falls back to cpu if unavailable
+
+router:
+  confidence_threshold: 0.85
+
+frame_sampler:
+  mode: fps   # fps | scene_change
+  fps: 1
+  dedupe_similarity_threshold: 0.97
