@@ -6,15 +6,16 @@ kind: InferenceService
 metadata:
   name: paddleocr
   namespace: ocr-pipeline
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
     minReplicas: 1
     maxReplicas: 5
-    scaleTarget: 10
-    scaleMetric: concurrency
     containers:
       - name: kserve-container
-        image: <ECR_REPO>/paddleocr:latest # replace after `docker push`
+        image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/paddleocr:latest
+        imagePullPolicy: Always
         ports:
           - containerPort: 8080
             protocol: TCP

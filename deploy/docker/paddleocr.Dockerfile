@@ -3,6 +3,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# opencv-python (a PaddleOCR dependency) needs libGL/glib at import time, which
+# python:3.11-slim doesn't ship.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY deploy/requirements/paddleocr.txt .
 RUN pip install --no-cache-dir -r paddleocr.txt
 

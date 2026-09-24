@@ -17,19 +17,20 @@ spec:
     spec:
       containers:
         - name: orchestrator
-          image: <ECR_REPO>/orchestrator:latest # replace after `docker push`
+          image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/orchestrator:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           env:
             # In-cluster KServe DNS names, once the InferenceServices below are applied.
             - name: PADDLEOCR_URL
-              value: http://paddleocr.ocr-pipeline.svc.cluster.local/v1/models/paddleocr:predict
+              value: http://paddleocr-predictor.ocr-pipeline.svc.cluster.local/v1/models/paddleocr:predict
             - name: GOT_OCR2_URL
-              value: http://got-ocr2.ocr-pipeline.svc.cluster.local/v1/models/got-ocr2:predict
+              value: http://got-ocr2-predictor.ocr-pipeline.svc.cluster.local/v1/models/got-ocr2:predict
             - name: LLM_CLEANUP_URL
-              value: http://llm-cleanup.ocr-pipeline.svc.cluster.local/openai/v1/chat/completions
+              value: http://llm-cleanup-predictor.ocr-pipeline.svc.cluster.local/openai/v1/chat/completions
             - name: OCR_CORS_ORIGINS
-              value: "https://<your-vercel-app>.vercel.app" # replace with the real frontend URL
+              value: "*" # TODO: tighten to the real Vercel URL once NEXT_PUBLIC_OCR_API_URL is set
           resources:
             requests:
               cpu: "250m"

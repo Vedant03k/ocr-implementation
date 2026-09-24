@@ -10,12 +10,17 @@ kind: InferenceService
 metadata:
   name: got-ocr2
   namespace: ocr-pipeline
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
-    minReplicas: 0 # scales to zero when idle — GPU nodes are expensive
+    # minReplicas: 0 would be ideal (GPU nodes are expensive) but RawDeployment
+    # mode's scale-from-zero (KEDA-based) is unverified/undocumented as of
+    # KServe v0.20 — chose reliability over cost here since this is low-volume
+    # test/demo traffic and cold starts would hurt latency. Scale the GPU
+    # nodegroup to 0 manually between sessions instead (see deploy/README.md).
+    minReplicas: 1
     maxReplicas: 3
-    scaleTarget: 5
-    scaleMetric: concurrency
     nodeSelector:
       nvidia.com/gpu.present: "true" # matches the GPU node group's label, see deploy/eks/cluster.yaml
     tolerations:
@@ -26,14 +31,15 @@ spec:
       - name: fetch-weights
         image: kserve/storage-initializer:latest
         args:
-          - s3://<BUCKET>/models/got_ocr2/ # replace <BUCKET>
+          - s3://ocr-pipeline-models-711446557912/models/got_ocr2/v1/
           - /mnt/models
         volumeMounts:
           - name: model-store
             mountPath: /mnt/models
     containers:
       - name: kserve-container
-        image: <ECR_REPO>/got-ocr2:latest # replace after `docker push`
+        image: 711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/got-ocr2:latest
+        imagePullPolicy: Always
         ports:
           - containerPort: 8080
             protocol: TCP

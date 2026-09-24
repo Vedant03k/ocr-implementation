@@ -16,9 +16,12 @@ kind: InferenceService
 metadata:
   name: llm-cleanup
   namespace: ocr-pipeline
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
-    minReplicas: 0
+    # See got-ocr2-isvc.yaml for why this is 1 instead of 0.
+    minReplicas: 1
     maxReplicas: 2
     nodeSelector:
       nvidia.com/gpu.present: "true"
@@ -29,17 +32,17 @@ spec:
     model:
       modelFormat:
         name: huggingface
-      storageUri: s3://<BUCKET>/models/llm_cleanup/ # replace <BUCKET>
+      storageUri: s3://ocr-pipeline-models-711446557912/models/llm_cleanup/v1/
       args:
         - --backend=vllm
         - --dtype=float16
         - --max-model-len=2048
       resources:
         requests:
-          cpu: "4"
-          memory: 12Gi
+          cpu: "2"
+          memory: 10Gi
           nvidia.com/gpu: "1"
         limits:
-          cpu: "8"
-          memory: 16Gi
+          cpu: "4"
+          memory: 14Gi
           nvidia.com/gpu: "1"
