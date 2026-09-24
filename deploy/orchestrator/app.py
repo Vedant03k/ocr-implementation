@@ -10,6 +10,7 @@ already-fetched results live. See src/ocr_pipeline/api.py's docstring note
 for why, and STEPS_TO_DEVELOP.md section 10.
 """
 
+import asyncio
 import base64
 import os
 import tempfile
@@ -105,9 +106,11 @@ async def _detections_for_frame(
 
     candidate_texts = [d["text"] for d in raw_detections]
     crops = [crop_polygon(image, np.asarray(d["poly"], dtype=np.float32)) for d in raw_detections]
-    specialist_texts = await _call_got_ocr2(crops)
-
-    cleaned_candidates = await _call_cleanup(candidate_texts)
+    # Candidate cleanup doesn't depend on GOT-OCR2.0's output, and the two run
+    # on separate pods, so overlap them instead of paying for both serially.
+    specialist_texts, cleaned_candidates = await asyncio.gather(
+        _call_got_ocr2(crops), _call_cleanup(candidate_texts)
+    )
     cleaned_specialists = await _call_cleanup(specialist_texts)
 
     out = []

@@ -49,16 +49,13 @@ kind: Service
 metadata:
   name: orchestrator
   namespace: ocr-pipeline
-  annotations:
-    # Default Classic ELB idle timeout is 60s, which the CPU-fallback
-    # got-ocr2/llm-cleanup path (see deploy/README.md) regularly exceeds —
-    # requests were getting silently killed mid-flight ("empty reply from
-    # server") even after fixing the orchestrator's own httpx timeout.
-    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "300"
 spec:
   selector:
     app: orchestrator
   ports:
     - port: 80
       targetPort: 8000
-  type: LoadBalancer # provisions a Classic ELB (no AWS Load Balancer Controller installed); swap for ClusterIP + Ingress if you front it with one
+  # Exposed publicly over HTTPS through Traefik (see ingress.yaml), not
+  # directly — a plain-HTTP LoadBalancer here would be blocked as mixed
+  # content by browsers loading the Vercel (HTTPS) frontend.
+  type: ClusterIP

@@ -1,0 +1,37 @@
+# helm install traefik traefik/traefik -n traefik --create-namespace -f deploy/k8s/traefik-values.yaml
+#
+# Ingress controller that terminates HTTPS for the orchestrator (see
+# ingress.yaml). Exists because Vercel serves the frontend over HTTPS and
+# browsers block fetch() from an HTTPS page to a plain-HTTP API.
+#
+# Exposed through a Classic ELB in TCP pass-through mode (TLS terminates at
+# Traefik, not the ELB). An NLB would be preferable (static IPs) but this
+# account currently gets "OperationNotPermitted: does not support creating
+# load balancers" for ELBv2 — Classic ELB creation is allowed. CloudFront and
+# API Gateway were ruled out: CloudFront needs account verification, and
+# their origin timeouts cap at 60s/29s, below the CPU path's ~150s+ latency.
+service:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "300"
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik
+
+nodeSelector:
+  workload: cpu
+
+additionalArguments:
+  # Traefik v3's default 60s readTimeout covers reading the whole request
+  # body; raised so large video uploads on slow connections aren't cut off.
+  - --entryPoints.web.transport.respondingTimeouts.readTimeout=300s
+  - --entryPoints.websecure.transport.respondingTimeouts.readTimeout=300s
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

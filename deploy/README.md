@@ -4,7 +4,7 @@ Everything needed to run the OCR pipeline as three independently-scaled KServe `
 
 ## Current deployment status (2026-09-24)
 
-**Fully live, end-to-end, on CPU.** A real image was posted to the orchestrator's public URL and came back with correct PaddleOCR + GOT-OCR2.0 + LLM-cleanup output. Quick reference:
+**Fully live, end-to-end, on CPU, over HTTPS.** A real image was posted to the orchestrator's public HTTPS URL and came back with correct PaddleOCR + GOT-OCR2.0 + LLM-cleanup output. Quick reference:
 
 | Resource | Value |
 | --- | --- |
@@ -12,7 +12,19 @@ Everything needed to run the OCR pipeline as three independently-scaled KServe `
 | AWS account | `711446557912` |
 | S3 model bucket | `s3://ocr-pipeline-models-711446557912/models/{got_ocr2,llm_cleanup}/v1/` |
 | ECR repos | `711446557912.dkr.ecr.us-east-1.amazonaws.com/ocr-pipeline/{paddleocr,got-ocr2,llm-cleanup,orchestrator}` |
-| Orchestrator URL | `http://a39c1f170492e470b8d22a14810ebd5d-1634070530.us-east-1.elb.amazonaws.com` |
+| Orchestrator URL (use this for `NEXT_PUBLIC_OCR_API_URL`) | `https://3-215-9-19.sslip.io` |
+
+**HTTPS setup (why it looks the way it does).** Vercel serves the frontend over HTTPS, and browsers block `fetch()` from an HTTPS page to a plain-HTTP API, so the orchestrator needed a trusted certificate. With no owned domain and a new AWS account, most standard options were unavailable:
+- CloudFront: blocked (`AccessDenied: Your account must be verified before you can add new CloudFront resources`), and its origin timeout caps at 60s anyway, below this deployment's CPU latency.
+- API Gateway: 29s integration timeout cap.
+- NLB/ALB + ACM: ELBv2 creation is blocked on this account (`OperationNotPermitted: This AWS account currently does not support creating load balancers`), and ACM needs an owned domain.
+- A Next.js API-route proxy on Vercel: would hit Vercel's serverless function timeout.
+
+What's running instead: **Traefik** (`k8s/traefik-values.yaml`, Helm) behind a **Classic ELB in TCP pass-through mode** with a 300s idle timeout, terminating TLS with a **Let's Encrypt certificate issued by cert-manager** (`k8s/ingress.yaml`) for an **sslip.io** hostname. sslip.io is a free public DNS service where `3-215-9-19.sslip.io` resolves to `3.215.9.19`, one of the Traefik ELB's IPs. The browser still talks straight to AWS (Vercel isn't in the request path), so no proxy timeout applies. cert-manager renews the certificate automatically.
+
+**Known fragility:** Classic ELB IPs aren't guaranteed static. If the HTTPS URL stops resolving to the ELB, find the new IP with `Resolve-DnsName (kubectl -n traefik get svc traefik -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")`, update both hostnames in `k8s/ingress.yaml`, re-apply it (cert-manager issues a new cert automatically), then update `NEXT_PUBLIC_OCR_API_URL` in Vercel and redeploy. The fix, once available, is an NLB (static IPs) or a real domain.
+
+The orchestrator's own Service is `ClusterIP` now. The original plain-HTTP Classic ELB (`http://a39c1f170492e470b8d22a14810ebd5d-1634070530.us-east-1.elb.amazonaws.com`) was removed, so HTTPS through Traefik is the only public entry point.
 
 **KServe was installed in RawDeployment mode, not Serverless.** The manifests here were originally written assuming Knative-style autoscaling (`scaleMetric: concurrency`), but installing Istio + Knative just for that turned out to be more moving parts / resource use than this cluster's CPU nodegroup comfortably supports. RawDeployment mode (cert-manager + KServe controller only, plain HPA autoscaling) is what's actually running.
 
@@ -20,7 +32,7 @@ Everything needed to run the OCR pipeline as three independently-scaled KServe `
 - `got-ocr2`: same custom container, just `nodeSelector: {workload: cpu}` instead of the GPU node group, no `nvidia.com/gpu` resources. `GotOcrRecognizer` already fell back to CPU automatically when CUDA isn't available, so no application code changed.
 - `llm-cleanup`: this one *did* need a real change — KServe's built-in HuggingFace+vLLM ServingRuntime (the original plan) has no practical CPU inference path, so it was replaced with a custom container (`deploy/serving/llm_cleanup_server.py`) running plain `transformers.generate()` on CPU via `ocr_pipeline.cleanup.TextCleaner` — the exact same class the local dev pipeline uses, so cleanup behavior is identical. The orchestrator's `_call_cleanup` was updated to call this new predict-protocol endpoint (`POST {"instances":[{"lines":[...]}]}`) instead of an OpenAI-style chat-completions endpoint.
 
-**Cost of the CPU fallback: latency.** A single-line smoke test took **~148s round-trip** (PaddleOCR + GOT-OCR2.0 + 2x LLM cleanup calls, all CPU, run sequentially by the orchestrator). Multi-line documents will take proportionally longer. Fine for the demo/low-volume use case this was built for; revisit (see "To restore GPU" below) before any real usage.
+**Cost of the CPU fallback: latency.** A single-line smoke test takes **~106s round-trip**. Measured per stage from the KServe trace logs: PaddleOCR ~2s, GOT-OCR2.0 ~61s *per detected line*, each LLM cleanup call ~42s. The orchestrator runs the PaddleOCR-text cleanup concurrently with GOT-OCR2.0 (they're independent and on separate pods), which cut the time from ~149s to ~106s. The GOT-OCR2.0-text cleanup still has to wait for GOT-OCR2.0. **GOT-OCR2.0 time grows with the number of detected lines** (one pod processes the crops one after another), so a 5–10 line photo will take several minutes. Browsers such as Firefox give up on a response after ~300s, and the ELB/orchestrator timeouts are also 300s. Use short, 1–3 line images for demos until GPU is restored (see "To restore GPU" below).
 
 Component status — all four Ready/Running:
 
@@ -30,7 +42,8 @@ Component status — all four Ready/Running:
 | `paddleocr` InferenceService | ✅ Ready (CPU, as always) |
 | `got-ocr2` InferenceService | ✅ Ready (CPU fallback) |
 | `llm-cleanup` InferenceService | ✅ Ready (CPU fallback, custom container) |
-| `orchestrator` Deployment | ✅ Running (2/2), LoadBalancer Service live, verified end-to-end |
+| `orchestrator` Deployment | ✅ Running (2/2), verified end-to-end |
+| Traefik + Let's Encrypt HTTPS | ✅ `https://3-215-9-19.sslip.io`, browser-trusted cert, CORS preflight OK |
 
 **Bugs found and fixed while bringing this up for real** (all already applied in the files below, kept here as a record since they weren't visible from manifests alone):
 - `docker/paddleocr.Dockerfile` was missing `libgl1`, `libglib2.0-0`, `libgomp1` — opencv/paddlepaddle's compiled deps that `python:3.11-slim` doesn't ship. Caused an immediate `ImportError: libGL.so.1` crash loop.
@@ -127,7 +140,17 @@ The LLM cleanup service is *not* a custom container the way the other two are �
    kubectl apply -f deploy/k8s/orchestrator.yaml
    ```
 
-6. **Point the frontend at it** — set `NEXT_PUBLIC_OCR_API_URL` in Vercel's project settings to the orchestrator Service's external address (`kubectl get svc orchestrator -n ocr-pipeline` once it's up), and make sure `OCR_CORS_ORIGINS` in `deploy/k8s/orchestrator.yaml` includes the actual Vercel URL.
+6. **Put HTTPS in front of the orchestrator** (Traefik + cert-manager + Let's Encrypt — see "HTTPS setup" above for why)
+   ```powershell
+   helm repo add traefik https://traefik.github.io/charts
+   helm install traefik traefik/traefik -n traefik --create-namespace -f deploy/k8s/traefik-values.yaml
+   # get the ELB's IP, then set both hostnames in deploy/k8s/ingress.yaml to <ip-with-dashes>.sslip.io
+   Resolve-DnsName (kubectl -n traefik get svc traefik -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+   kubectl apply -f deploy/k8s/ingress.yaml
+   kubectl -n ocr-pipeline get certificate orchestrator-tls   # wait for READY=True
+   ```
+
+7. **Point the frontend at it** — in the Vercel project settings, set **Root Directory** to `web`, set `NEXT_PUBLIC_OCR_API_URL` to the HTTPS URL from step 6 (no trailing slash), and redeploy (`NEXT_PUBLIC_*` vars are baked in at build time, so changing one requires a new build). Then tighten `OCR_CORS_ORIGINS` in `deploy/k8s/orchestrator.yaml` from `"*"` to the actual Vercel URL and re-apply.
 
 ## Local dev is unaffected
 

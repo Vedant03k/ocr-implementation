@@ -1,0 +1,48 @@
+# HTTPS entry point for the orchestrator: Let's Encrypt certificate issued
+# by cert-manager (already installed as a KServe prerequisite), served by
+# Traefik (see traefik-values.yaml).
+#
+# No owned domain is available, so the hostname is an sslip.io name — a free
+# public DNS service where 3-215-9-19.sslip.io resolves to 3.215.9.19.
+# That IP is one of the Traefik Classic ELB's addresses. Classic ELB IPs can
+# change; if HTTPS stops resolving, re-check the IP with
+#   Resolve-DnsName (kubectl -n traefik get svc traefik -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+# and update both hosts below plus NEXT_PUBLIC_OCR_API_URL in Vercel.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orchestrator
+  namespace: ocr-pipeline
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - 3-215-9-19.sslip.io
+      secretName: orchestrator-tls
+  rules:
+    - host: 3-215-9-19.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 80
