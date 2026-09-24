@@ -16,3 +16,8 @@ verovio
 pydantic
 opencv-python
 pyyaml
+
+# API server (web/ frontend integration)
+fastapi
+uvicorn
+python-multipart

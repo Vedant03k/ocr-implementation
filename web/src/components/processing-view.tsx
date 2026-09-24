@@ -7,7 +7,7 @@ import type { PipelineStage } from "@/types/ocr";
 
 interface ProcessingViewProps {
   stages: PipelineStage[];
-  routingStats: RoutingStats;
+  routingStats?: RoutingStats;
 }
 
 export function ProcessingView({ stages, routingStats }: ProcessingViewProps) {
@@ -51,14 +51,14 @@ export function ProcessingView({ stages, routingStats }: ProcessingViewProps) {
                 <RecognitionPathBar
                   label="Fast path"
                   sublabel="PaddleOCR"
-                  count={routingStats.fastPath}
+                  count={routingStats?.fastPath}
                   active={recognitionStage.status === "running"}
                   barClassName="bg-emerald-500"
                 />
                 <RecognitionPathBar
                   label="Specialist"
                   sublabel="GOT-OCR2.0"
-                  count={routingStats.specialist}
+                  count={routingStats?.specialist}
                   active={recognitionStage.status === "running"}
                   barClassName="bg-amber-500"
                 />
@@ -94,7 +94,7 @@ function StageIcon({ status }: { status: PipelineStage["status"] }) {
 interface RecognitionPathBarProps {
   label: string;
   sublabel: string;
-  count: number;
+  count: number | undefined;
   active: boolean;
   barClassName: string;
 }
@@ -110,7 +110,7 @@ function RecognitionPathBar({
     <div className="rounded-md border border-zinc-200 p-2 dark:border-zinc-800">
       <div className="flex items-baseline justify-between">
         <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100">{label}</span>
-        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{count}</span>
+        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{count ?? "—"}</span>
       </div>
       <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{sublabel}</p>
       {active ? (

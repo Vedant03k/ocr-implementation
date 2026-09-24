@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
-import { IMAGE_DETECTIONS, VIDEO_DETECTIONS, type RawDetection } from "@/lib/mock-fixtures";
+import type { RawDetection } from "@/lib/mock-fixtures";
+import { fetchDetections } from "@/lib/ocr-api";
 import { runPipelineSimulation, stagesForMedia } from "@/lib/pipeline-stages";
 import type { AppPhase, MediaKind, PipelineStage, PipelineStageId } from "@/types/ocr";
 
@@ -21,6 +22,7 @@ interface PipelineState {
   confidenceThreshold: number;
   rawDetections: RawDetection[] | null;
   videoDurationSeconds: number | null;
+  error: string | null;
 }
 
 type Action =
@@ -31,7 +33,8 @@ type Action =
   | { type: "STAGE_START"; stageId: PipelineStageId }
   | { type: "STAGE_PROGRESS"; stageId: PipelineStageId; progress: number }
   | { type: "STAGE_DONE"; stageId: PipelineStageId }
-  | { type: "PROCESSING_COMPLETE" };
+  | { type: "PROCESSING_COMPLETE"; detections: RawDetection[] }
+  | { type: "PROCESSING_FAILED"; error: string };
 
 const initialState: PipelineState = {
   phase: "upload",
@@ -40,6 +43,7 @@ const initialState: PipelineState = {
   confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
   rawDetections: null,
   videoDurationSeconds: null,
+  error: null,
 };
 
 function reducer(state: PipelineState, action: Action): PipelineState {
@@ -84,8 +88,10 @@ function reducer(state: PipelineState, action: Action): PipelineState {
       return {
         ...state,
         phase: "results",
-        rawDetections: state.media?.mediaKind === "video" ? VIDEO_DETECTIONS : IMAGE_DETECTIONS,
+        rawDetections: action.detections,
       };
+    case "PROCESSING_FAILED":
+      return { ...initialState, confidenceThreshold: state.confidenceThreshold, error: action.error };
     default:
       return state;
   }
@@ -101,7 +107,7 @@ export function useOcrPipeline() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    runPipelineSimulation(
+    const simulation = runPipelineSimulation(
       state.media.mediaKind,
       {
         onStageStart: (stageId) => dispatch({ type: "STAGE_START", stageId }),
@@ -110,9 +116,18 @@ export function useOcrPipeline() {
         onStageDone: (stageId) => dispatch({ type: "STAGE_DONE", stageId }),
       },
       controller.signal,
-    ).then(() => {
-      if (!controller.signal.aborted) dispatch({ type: "PROCESSING_COMPLETE" });
-    });
+    );
+    const fetching = fetchDetections(state.media.file, controller.signal);
+
+    Promise.all([simulation, fetching])
+      .then(([, detections]) => {
+        if (!controller.signal.aborted) dispatch({ type: "PROCESSING_COMPLETE", detections });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : "OCR request failed";
+        dispatch({ type: "PROCESSING_FAILED", error: message });
+      });
 
     return () => controller.abort();
   }, [state.phase, state.media]);

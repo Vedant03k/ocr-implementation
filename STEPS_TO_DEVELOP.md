@@ -101,8 +101,40 @@ ocr-implementation/
 - [x] Merge/post-process step
 - [x] JSON output schema wired end-to-end
 - [x] Smoke-tested end-to-end on a synthetic image, both the PaddleOCR fast path and a forced GOT-OCR2.0 escalation
+- [x] UI for uploading images/video and viewing results — `web/` (merged from `dev-amrita`) wired to the real backend (see §10); browser-tested end-to-end, including live threshold re-routing
 - [ ] Validated against real handwriting samples (only tested on a synthetic printed-text image so far)
-- [ ] UI for uploading images/video and viewing results
+
+## 10. Web GUI integration
+
+`web/` (merged from `dev-amrita`) originally ran entirely on mock data — a static fixture array plus a client-side simulated progress animation, with no backend call at all. Wired it to the real pipeline:
+
+- **`src/ocr_pipeline/api.py`** — a FastAPI server. Loads `PaddleDetector` and `GotOcrRecognizer` once at startup (not per-request — reloading both models per call would make every upload take 10s+ just for weight loading) and exposes `POST /api/ocr` (multipart file upload, image or video).
+- **Deliberate deviation from `router.py`'s real routing logic**: the API always runs GOT-OCR2.0 on every detected box, regardless of confidence, and returns both PaddleOCR's and GOT-OCR2.0's answer for each one. This matches the frontend's existing `RawDetection` contract (`candidateText` + `specialistText` + `rawConfidence`), which was designed so the GUI's threshold slider can re-route already-fetched results live without re-hitting the backend. The real pipeline (`router.py`, used by `main.py`/CLI) only escalates crops below the threshold, as the architecture intends — this GUI-only shortcut trades some extra GOT-OCR2.0 calls for a responsive demo slider. Don't copy this pattern into the Kubeflow inference path.
+- **`web/src/lib/ocr-api.ts`** — `fetchDetections()`, POSTs the uploaded file and returns `RawDetection[]`. Reads `NEXT_PUBLIC_OCR_API_URL` (defaults to `http://localhost:8000`).
+- **`web/src/hooks/use-ocr-pipeline.ts`** — the "processing" phase now runs the real fetch and the cosmetic stage-progress animation in parallel (`Promise.all`), completing only once the real backend response arrives. On failure, reverts to the upload screen with an error banner instead of leaving the UI stuck.
+- **`web/src/components/processing-view.tsx`** — no longer shows a routing-stats preview during processing (it used to read counts off the *unrelated* static mock invoice data, which would have been actively misleading once real uploads were wired in). Real routing stats still appear once results are in (`results-view.tsx`/`ocr-routing.ts`, unchanged).
+
+**Bug found and fixed during browser testing:** `box-detail-panel.tsx` checks `box.timestamp !== undefined` before calling `.toFixed()`, but the real backend serializes an absent timestamp as JSON `null` (Pydantic `Optional[float] = None`), not `undefined` — `null !== undefined` is `true`, so it took the branch and crashed on `null.toFixed()`. The mock fixtures never hit this because they either had a real number or omitted the field entirely. Fixed at the API boundary in `ocr-api.ts`, normalizing `null → undefined` right after parsing the response, so every downstream file's `number | undefined` typing is actually true at runtime.
+
+### Running it
+
+```powershell
+# Terminal 1 — backend
+$env:PYTHONPATH = "src"
+.venv\Scripts\python.exe -m uvicorn ocr_pipeline.api:app --port 8000
+
+# Terminal 2 — frontend
+cd web
+npm run dev
+```
+
+Open `http://localhost:3000`, upload an image or video, and results come from the real pipeline.
+
+### Known limitations of this integration pass
+
+- Running GOT-OCR2.0 on every detected box (not just escalated ones) is fine for a handful of boxes in a demo image, but doesn't scale to a busy frame or a long video — this is explicitly a GUI-only convenience, not how the Kubeflow-bound inference path should work.
+- The cosmetic stage-progress animation (frame-sampling/detection/recognition/merging bars) runs on a fixed ~3–4s timer unrelated to real backend latency; for a slow request the bars will sit at 100% while still waiting on the actual response. No real progress streaming (SSE/WebSocket) is wired up yet.
+- Only browser-tested against a single synthetic printed-text image (both the fast path and forced escalation) — not yet tried against a real photo, a real video, or real handwriting.
 
 ## 8. Running the pipeline
 
