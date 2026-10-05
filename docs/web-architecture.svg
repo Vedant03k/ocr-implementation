@@ -1,6 +1,6 @@
 <svg width="980" height="360" viewBox="0 0 980 360" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Helvetica, Arial, sans-serif">
 <title>Web app architecture: browser, FastAPI backend, OCR pipeline</title>
-<desc>The Next.js browser GUI uploads an image or video to the FastAPI backend, which runs it through the OCR pipeline (PaddleOCR detection/recognition, GOT-OCR2.0 escalation, merge, LLM cleanup) and returns JSON, which the browser renders as bounding boxes and recognized text.</desc>
+<desc>The Next.js browser GUI uploads an image or video to the FastAPI backend, which runs it through the OCR pipeline (PaddleOCR detection/recognition, PaddleOCR-VL-1.5 escalation, merge, word correction) and returns JSON, which the browser renders as bounding boxes and recognized text.</desc>
 
 <defs>
   <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -32,7 +32,7 @@
 
 <!-- response flow (bottom arrows, right to left) -->
 <line class="arr" x1="690" y1="220" x2="590" y2="220" marker-end="url(#arrow2)"/>
-<text x="640" y="245" text-anchor="middle" class="tl lbl">3. Text blocks + boxes</text>
+<text x="640" y="245" text-anchor="middle" class="tl lbl">3. Text + boxes</text>
 
 <line class="arr" x1="330" y1="220" x2="230" y2="220" marker-end="url(#arrow2)"/>
 <text x="280" y="245" text-anchor="middle" class="tl lbl">4. JSON response</text>
@@ -59,9 +59,9 @@
   <rect class="box blue" x="690" y="110" width="260" height="140"/>
   <text x="820" y="150" text-anchor="middle" class="th tblue">OCR pipeline</text>
   <text x="820" y="170" text-anchor="middle" class="ts tblue">PaddleOCR detect + recognize</text>
-  <text x="820" y="186" text-anchor="middle" class="ts tblue">GOT-OCR2.0 escalation</text>
+  <text x="820" y="186" text-anchor="middle" class="ts tblue">PaddleOCR-VL-1.5 escalation</text>
   <text x="820" y="202" text-anchor="middle" class="ts tblue">Merge &amp; reorder</text>
-  <text x="820" y="218" text-anchor="middle" class="ts tblue">LLM cleanup</text>
+  <text x="820" y="218" text-anchor="middle" class="ts tblue">Word correction</text>
   <text x="820" y="236" text-anchor="middle" class="tl lbl">(see architecture.svg)</text>
 </g>
 </svg>

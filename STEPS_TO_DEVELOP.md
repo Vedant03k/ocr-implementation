@@ -78,7 +78,7 @@ ocr-implementation/
 │   ├── frame_sampler.py       # video -> sampled frames (fixed FPS + dedupe)
 │   ├── detector.py            # PaddleOCR detection + first-pass recognition
 │   ├── recognizer_fast.py     # reads PaddleOCR's own recognition result
-│   ├── recognizer_specialist.py  # GOT-OCR2.0 (transformers)
+│   ├── recognizer_specialist.py  # PaddleOCR-VL-1.5 (default) / GOT-OCR2.0 (transformers)
 │   ├── router.py              # confidence-based escalation to the specialist
 │   ├── merge.py                # reading-order sort + final TextBlock list
 │   ├── schema.py              # pydantic JSON output schema
