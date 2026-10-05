@@ -8,7 +8,7 @@ from .cleanup import TextCleaner
 from .detector import PaddleDetector
 from .frame_sampler import sample_frames
 from .merge import merge_and_reorder
-from .recognizer_specialist import GotOcrRecognizer
+from .recognizer_specialist import load_specialist
 from .router import route
 from .schema import OCRResult
 from .word_corrector import WordCorrector
@@ -26,13 +26,9 @@ def run(input_path: str, config: dict) -> OCRResult:
         lang=config["paddleocr"]["lang"],
         device=config["paddleocr"].get("device", "cpu"),
         use_doc_unwarping=config["paddleocr"].get("use_doc_unwarping", False),
+        det_limit_side_len=config["paddleocr"].get("det_limit_side_len"),
     )
-    specialist = GotOcrRecognizer(
-        model_dir=config["got_ocr2"]["model_dir"],
-        device=config["got_ocr2"].get("device"),
-        max_new_tokens=config["got_ocr2"].get("max_new_tokens", 128),
-        batch_size=config["got_ocr2"].get("batch_size", 4),
-    )
+    specialist = load_specialist(config)
     threshold = config["router"]["confidence_threshold"]
 
     cleanup_cfg = config.get("llm_cleanup", {})

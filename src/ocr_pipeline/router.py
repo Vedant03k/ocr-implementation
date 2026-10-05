@@ -3,7 +3,7 @@ from typing import NamedTuple
 import numpy as np
 
 from .detector import Detection
-from .recognizer_specialist import GotOcrRecognizer
+from .recognizer_specialist import GotOcrRecognizer, PaddleOcrVlRecognizer
 from .schema import BoundingBox
 from .utils import crop_polygon
 
@@ -18,7 +18,7 @@ class RoutedBlock(NamedTuple):
 def route(
     image: np.ndarray,
     detections: list[Detection],
-    specialist: GotOcrRecognizer,
+    specialist: GotOcrRecognizer | PaddleOcrVlRecognizer,
     confidence_threshold: float = 0.85,
 ) -> list[RoutedBlock]:
     escalated = [det for det in detections if det.score < confidence_threshold]
@@ -28,5 +28,8 @@ def route(
         if det.score >= confidence_threshold:
             routed.append(RoutedBlock(box=det.box, text=det.text, confidence=det.score, source="paddleocr"))
         else:
-            routed.append(RoutedBlock(box=det.box, text=next(specialist_texts), confidence=det.score, source="got_ocr2"))
+            # An empty specialist read means it was rejected; keep PaddleOCR's.
+            text = next(specialist_texts)
+            source = specialist.name if text else "paddleocr"
+            routed.append(RoutedBlock(box=det.box, text=text or det.text, confidence=det.score, source=source))
     return routed

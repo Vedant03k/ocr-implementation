@@ -1,4 +1,4 @@
-export type OcrModel = "paddleocr" | "got-ocr2";
+export type OcrModel = "paddleocr" | "paddleocr-vl";
 
 export type MediaKind = "image" | "video";
 

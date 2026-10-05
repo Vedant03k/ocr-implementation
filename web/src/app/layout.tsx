@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "OCR Pipeline",
-  description: "Upload images or video and inspect PaddleOCR + GOT-OCR2.0 pipeline results.",
+  description: "Upload images or video and inspect PaddleOCR + PaddleOCR-VL pipeline results.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

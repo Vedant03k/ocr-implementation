@@ -13,7 +13,7 @@ export async function fetchDetections(
 ): Promise<RawDetection[]> {
   const formData = new FormData();
   formData.append("file", file);
-  // The backend only sends lines below this threshold to GOT-OCR2.0.
+  // The backend only sends lines below this threshold to PaddleOCR-VL.
   formData.append("threshold", String(threshold));
 
   const response = await fetch(`${API_BASE_URL}/api/ocr`, {

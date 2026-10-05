@@ -57,7 +57,7 @@ export function ProcessingView({ stages, routingStats }: ProcessingViewProps) {
                 />
                 <RecognitionPathBar
                   label="Specialist"
-                  sublabel="GOT-OCR2.0"
+                  sublabel="PaddleOCR-VL"
                   count={routingStats?.specialist}
                   active={recognitionStage.status === "running"}
                   barClassName="bg-amber-500"

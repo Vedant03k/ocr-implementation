@@ -5,6 +5,22 @@ paddleocr:
   # Flattens photos of curled/bent pages. Off: on flat images it distorted
   # letters (8x more errors) and cost ~1.3s per image. Re-check on real photos.
   use_doc_unwarping: false
+  # Longest image side the text detector sees. On 8 real 4000x3000 phone photos
+  # (GNHK): full size 62.7s/page, CER 50.7%; 1280 20.1s/page, CER 37.3%; 960
+  # 15.3s but CER 40.8%. Full-size photos split lines into fragments.
+  det_limit_side_len: 1280
+
+specialist:
+  # Fallback recognizer for lines PaddleOCR is unsure about: paddleocr_vl | got_ocr2.
+  # paddleocr_vl: half the character errors of got_ocr2 on real handwriting
+  # (GNHK, 300 lines: 10.2% vs 21.0%), faster and ~half the GPU memory.
+  engine: paddleocr_vl
+
+paddleocr_vl:
+  model_dir: models/paddleocr_vl_1_5
+  device: cuda   # falls back to cpu if unavailable
+  max_new_tokens: 128
+  batch_size: 1
 
 got_ocr2:
   model_dir: models/got_ocr2
@@ -31,7 +47,10 @@ llm_cleanup:
   device: cuda   # falls back to cpu if unavailable
 
 router:
-  confidence_threshold: 0.85
+  # Lines PaddleOCR scores below this are re-read by the specialist. On 58 real
+  # handwritten photos (GNHK): 0 -> word F1 0.737, 17.5s/page; 0.97 -> 0.812,
+  # 26.8s/page (55% of lines re-read); 1.0 -> 0.818, 33.6s/page.
+  confidence_threshold: 0.97
 
 frame_sampler:
   mode: fps   # fps | scene_change

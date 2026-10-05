@@ -7,7 +7,8 @@ import { fetchDetections } from "@/lib/ocr-api";
 import { runPipelineSimulation, stagesForMedia } from "@/lib/pipeline-stages";
 import type { AppPhase, MediaKind, PipelineStage, PipelineStageId } from "@/types/ocr";
 
-export const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
+// Matches config/config.yaml's router.confidence_threshold (benchmarked on real handwriting).
+export const DEFAULT_CONFIDENCE_THRESHOLD = 0.97;
 
 export interface UploadedMedia {
   file: File;

@@ -1,6 +1,6 @@
 """Downloads model weights. PaddleOCR caches to ~/.paddlex/official_models
 (its 3.x/PaddleX backend does not support downloading into a custom dir);
-GOT-OCR2.0 downloads into models/got_ocr2."""
+PaddleOCR-VL-1.5 into models/paddleocr_vl_1_5, GOT-OCR2.0 into models/got_ocr2."""
 import os
 
 from huggingface_hub import snapshot_download
@@ -11,6 +11,13 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 
 def download_paddleocr():
     PaddleOCR(lang="en")
+
+
+def download_paddleocr_vl():
+    snapshot_download(
+        "PaddlePaddle/PaddleOCR-VL-1.5",
+        local_dir=os.path.join(MODELS_DIR, "paddleocr_vl_1_5"),
+    )
 
 
 def download_got_ocr2():
@@ -30,6 +37,8 @@ def download_llm_cleanup():
 if __name__ == "__main__":
     print("Downloading PaddleOCR weights...")
     download_paddleocr()
+    print("Downloading PaddleOCR-VL-1.5 weights...")
+    download_paddleocr_vl()
     print("Downloading GOT-OCR2.0 weights...")
     download_got_ocr2()
     print("Downloading LLM cleanup weights...")

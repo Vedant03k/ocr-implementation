@@ -1,6 +1,6 @@
 /**
  * Simulated PaddleOCR detector+recognizer output. `rawConfidence` is what the fast path
- * reported; `specialistText` is what GOT-OCR2.0 would produce if a crop escalates. Real
+ * reported; `specialistText` is what PaddleOCR-VL would produce if a crop escalates. Real
  * boxes are normalized (0-1) so they overlay on whatever media the user uploads.
  */
 export interface RawDetection {

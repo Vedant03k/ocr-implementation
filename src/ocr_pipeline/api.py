@@ -11,7 +11,7 @@ from .cleanup import TextCleaner
 from .detector import PaddleDetector
 from .frame_sampler import sample_frames
 from .main import VIDEO_EXTENSIONS, load_config
-from .recognizer_specialist import GotOcrRecognizer
+from .recognizer_specialist import load_specialist
 from .utils import crop_polygon
 from .word_corrector import WordCorrector
 
@@ -20,13 +20,9 @@ detector = PaddleDetector(
     lang=config["paddleocr"]["lang"],
     device=config["paddleocr"].get("device", "cpu"),
     use_doc_unwarping=config["paddleocr"].get("use_doc_unwarping", False),
+    det_limit_side_len=config["paddleocr"].get("det_limit_side_len"),
 )
-specialist = GotOcrRecognizer(
-    model_dir=config["got_ocr2"]["model_dir"],
-    device=config["got_ocr2"].get("device"),
-    max_new_tokens=config["got_ocr2"].get("max_new_tokens", 128),
-    batch_size=config["got_ocr2"].get("batch_size", 4),
-)
+specialist = load_specialist(config)
 _cleanup_cfg = config.get("llm_cleanup", {})
 cleaner = (
     TextCleaner(_cleanup_cfg["model_dir"], _cleanup_cfg.get("device")) if _cleanup_cfg.get("enabled") else None
@@ -86,9 +82,10 @@ def _detections_for_frame(
     height, width = image.shape[:2]
     detections = detector.detect(image)
     escalated = [i for i, det in enumerate(detections) if det.score < threshold]
-    specialist_texts = dict(
-        zip(escalated, specialist.recognize_batch([crop_polygon(image, detections[i].poly) for i in escalated]))
-    )
+    reads = specialist.recognize_batch([crop_polygon(image, detections[i].poly) for i in escalated])
+    # An empty read was rejected (see recognizer_specialist.usable); that line
+    # stays on PaddleOCR's text, as if it had never escalated.
+    specialist_texts = {i: text for i, text in zip(escalated, reads) if text}
     routed = [specialist_texts.get(i, det.text) for i, det in enumerate(detections)]
 
     # One whole-frame pass over the routed text (not per box), so each line's

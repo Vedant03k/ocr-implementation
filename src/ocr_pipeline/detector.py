@@ -27,14 +27,22 @@ class PaddleDetector:
         device: str = "cpu",
         use_textline_orientation: bool = True,
         use_doc_unwarping: bool = False,
+        det_limit_side_len: int | None = None,
     ):
         from paddleocr import PaddleOCR
 
+        # Detection runs on the image shrunk so its longer side is at most this;
+        # boxes come back in original coordinates, so crops stay full resolution.
+        limit = {} if det_limit_side_len is None else {
+            "text_det_limit_type": "max",
+            "text_det_limit_side_len": det_limit_side_len,
+        }
         self._ocr = PaddleOCR(
             lang=lang,
             device=device,
             use_textline_orientation=use_textline_orientation,
             use_doc_unwarping=use_doc_unwarping,
+            **limit,
             enable_mkldnn=False,  # works around a PaddlePaddle 3.3.x CPU oneDNN bug, still present in 3.3.1
         )
 

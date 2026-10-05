@@ -58,8 +58,8 @@ export function SettingsPanel({
             className="mt-2 w-full accent-zinc-900 dark:accent-zinc-100"
           />
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-500">
-            Crops where PaddleOCR&apos;s confidence falls below this value escalate to GOT-OCR2.0.
-            Applied on upload; afterwards only lines already read by GOT-OCR2.0 can be re-routed.
+            Crops where PaddleOCR&apos;s confidence falls below this value escalate to PaddleOCR-VL.
+            Applied on upload; afterwards only lines already read by PaddleOCR-VL can be re-routed.
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -72,7 +72,7 @@ export function SettingsPanel({
             />
             <RoutingStat
               label="Specialist"
-              sublabel="GOT-OCR2.0"
+              sublabel="PaddleOCR-VL"
               value={routingStats.specialist}
               total={routingStats.total}
               barClassName="bg-amber-500"

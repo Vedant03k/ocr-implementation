@@ -6,7 +6,7 @@ holding the correct transcription, one text line per line in reading order.
 Runs the same per-image code path as the /api/ocr endpoint, timing each model
 stage, and scores the text the GUI would show at the given threshold:
   paddleocr       PaddleOCR text for every line
-  routed          GOT-OCR2.0 text for lines below the threshold, PaddleOCR otherwise
+  routed          fallback-recognizer text for lines below the threshold, PaddleOCR otherwise
   routed_cleaned  the LLM-cleaned version of `routed` (what the GUI shows by default)
 CER/WER are edit distance over the whole page (lines joined by spaces),
 case-sensitive, summed over all images.
@@ -66,6 +66,8 @@ class StageTimer:
             self.sync()
             self.seconds[stage] += time.perf_counter() - start
             self.calls[stage] += 1
+            if stage == "specialist":
+                self.calls["specialist_lines"] += len(args[0]) if method_name == "recognize_batch" else 1
             return result
 
         setattr(obj, method_name, timed)
@@ -88,11 +90,54 @@ def page_texts(detections, image_height: int, threshold: float) -> dict[str, str
     return {name: normalize(" ".join(parts)) for name, parts in variants.items()}
 
 
+def sweep(per_image: list[dict], thresholds: list[float], corrector) -> list[dict]:
+    """Re-scores a run at lower thresholds without re-running any model.
+
+    Valid only for thresholds <= the run's threshold (those lines all have
+    specialistText). Time is estimated from the measured per-line specialist cost.
+    """
+    specialist_lines = sum(r["stage_calls"].get("specialist_lines", 0) for r in per_image)
+    specialist_seconds = sum(r["stage_seconds"].get("specialist", 0.0) for r in per_image)
+    per_line = specialist_seconds / max(specialist_lines, 1)
+    rows = []
+    for threshold in thresholds:
+        totals = defaultdict(int)
+        escalated = 0
+        for r in per_image:
+            ordered = sorted(r["detections"], key=lambda d: (round(d["y"] * r["height"] / 15), d["x"]))
+            routed = []
+            for d in ordered:
+                escalate = d["conf"] < threshold and bool(d["specialist"])
+                escalated += escalate
+                routed.append(d["specialist"] if escalate else d["candidate"])
+            corrected = corrector.correct_lines(routed, [d["conf"] for d in ordered]) if corrector and routed else routed
+            reference = r["reference"]
+            for name, parts in (("routed", routed), ("routed_corrected", corrected)):
+                hypothesis = normalize(" ".join(parts))
+                totals[f"{name}_char"] += edit_distance(list(hypothesis), list(reference))
+                totals[f"{name}_word"] += edit_distance(hypothesis.split(), reference.split())
+            totals["ref_char"] += len(reference)
+            totals["ref_word"] += len(reference.split())
+        detector_seconds = sum(r["stage_seconds"].get("detector", 0.0) for r in per_image)
+        rows.append({
+            "threshold": threshold,
+            "escalated_fraction": escalated / max(sum(len(r["detections"]) for r in per_image), 1),
+            "est_seconds_per_page": (detector_seconds + escalated * per_line) / len(per_image),
+            "routed_cer": totals["routed_char"] / totals["ref_char"],
+            "routed_wer": totals["routed_word"] / totals["ref_word"],
+            "corrected_cer": totals["routed_corrected_char"] / totals["ref_char"],
+            "corrected_wer": totals["routed_corrected_word"] / totals["ref_word"],
+        })
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", required=True, help="folder of images + same-named .txt transcriptions")
     parser.add_argument("--label", default="run", help="name for this run, used in the output filename")
     parser.add_argument("--threshold", type=float, default=None, help="routing threshold (default: config value)")
+    parser.add_argument("--sweep", type=float, nargs="*", default=[],
+                        help="also re-score at these thresholds (each <= --threshold; use --threshold 1 to allow any)")
     parser.add_argument("--out-dir", default="benchmark/results")
     args = parser.parse_args()
 
@@ -159,6 +204,11 @@ def main():
             "reference": reference,
             "texts": texts,
             "scores": scores,
+            "height": image.shape[0],
+            "detections": [
+                {"x": d.x, "y": d.y, "conf": d.rawConfidence, "candidate": d.candidateText, "specialist": d.specialistText}
+                for d in detections
+            ],
         })
         print(f"{path.name}: {seconds:6.2f}s  lines={len(detections)}  "
               + "  ".join(f"{n} CER={s['cer']:.3f}" for n, s in scores.items()))
@@ -204,6 +254,10 @@ def main():
         "config": api.config,
     }
 
+    thresholds = [t for t in args.sweep if t <= threshold]
+    if thresholds:
+        summary["sweep"] = sweep(per_image, thresholds, getattr(api, "corrector", None))
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{datetime.datetime.now():%Y%m%d-%H%M%S}-{args.label}.json"
@@ -218,6 +272,10 @@ def main():
     if gpu:
         print(f"gpu      peak {gpu['peak_reserved_mib']} MiB of {gpu['total_vram_mib']} MiB"
               + ("  ** exceeds dedicated VRAM (spilling to system RAM) **" if gpu["exceeds_dedicated_vram"] else ""))
+    for row in summary.get("sweep", []):
+        print(f"sweep {row['threshold']:.2f}  escalated {row['escalated_fraction']:.0%}  "
+              f"~{row['est_seconds_per_page']:.1f}s/page  CER {row['routed_cer']:.4f}  WER {row['routed_wer']:.4f}  "
+              f"+corrector CER {row['corrected_cer']:.4f}  WER {row['corrected_wer']:.4f}")
     print(f"saved    {out_path}")
 
 

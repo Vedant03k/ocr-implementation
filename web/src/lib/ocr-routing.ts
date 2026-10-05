@@ -1,12 +1,12 @@
 import type { RawDetection } from "@/lib/mock-fixtures";
 import type { OcrBox, OcrResult } from "@/types/ocr";
 
-/** Confidence boost applied when GOT-OCR2.0 re-reads a crop the fast path was unsure about. */
+/** Confidence boost applied when PaddleOCR-VL re-reads a crop the fast path was unsure about. */
 const SPECIALIST_CONFIDENCE_BOOST = 0.28;
 const SPECIALIST_CONFIDENCE_CAP = 0.99;
 
 /**
- * The backend only runs GOT-OCR2.0 on lines below the threshold sent with the upload, so a
+ * The backend only runs PaddleOCR-VL on lines below the threshold sent with the upload, so a
  * line without specialistText stays on the fast path even if the slider is raised afterwards.
  */
 export function escalates(detection: RawDetection, threshold: number): boolean {
@@ -24,7 +24,7 @@ export function routeDetections(
 ): OcrResult {
   const boxes: OcrBox[] = detections.map((detection) => {
     const escalate = escalates(detection, threshold);
-    const model = escalate ? "got-ocr2" : "paddleocr";
+    const model = escalate ? "paddleocr-vl" : "paddleocr";
     const text =
       escalate && detection.specialistText ? detection.specialistText : detection.candidateText;
     const confidence = escalate

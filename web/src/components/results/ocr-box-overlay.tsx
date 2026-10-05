@@ -12,7 +12,7 @@ interface OcrBoxOverlayProps {
 
 const MODEL_BORDER_CLASS: Record<OcrBox["model"], string> = {
   paddleocr: "border-emerald-500",
-  "got-ocr2": "border-amber-500",
+  "paddleocr-vl": "border-amber-500",
 };
 
 export function OcrBoxOverlay({

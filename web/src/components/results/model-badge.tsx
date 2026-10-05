@@ -2,12 +2,12 @@ import type { OcrModel } from "@/types/ocr";
 
 const MODEL_LABEL: Record<OcrModel, string> = {
   paddleocr: "PaddleOCR",
-  "got-ocr2": "GOT-OCR2.0",
+  "paddleocr-vl": "PaddleOCR-VL",
 };
 
 const MODEL_CLASSNAME: Record<OcrModel, string> = {
   paddleocr: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
-  "got-ocr2": "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+  "paddleocr-vl": "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
 };
 
 export function ModelBadge({ model }: { model: OcrModel }) {
