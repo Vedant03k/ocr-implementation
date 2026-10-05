@@ -5,8 +5,12 @@ import type { OcrBox, OcrResult } from "@/types/ocr";
 const SPECIALIST_CONFIDENCE_BOOST = 0.28;
 const SPECIALIST_CONFIDENCE_CAP = 0.99;
 
+/**
+ * The backend only runs GOT-OCR2.0 on lines below the threshold sent with the upload, so a
+ * line without specialistText stays on the fast path even if the slider is raised afterwards.
+ */
 export function escalates(detection: RawDetection, threshold: number): boolean {
-  return detection.rawConfidence < threshold;
+  return detection.rawConfidence < threshold && detection.specialistText !== undefined;
 }
 
 /**

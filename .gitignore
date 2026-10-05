@@ -16,6 +16,9 @@ models/
 .env
 *.log
 
+# Benchmark images/transcriptions (may be personal handwriting) and results.
+benchmark/
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

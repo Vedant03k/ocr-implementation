@@ -100,6 +100,11 @@ function reducer(state: PipelineState, action: Action): PipelineState {
 export function useOcrPipeline() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const abortRef = useRef<AbortController | null>(null);
+  // Read at upload time; a ref so moving the slider doesn't re-send the upload.
+  const thresholdRef = useRef(state.confidenceThreshold);
+  useEffect(() => {
+    thresholdRef.current = state.confidenceThreshold;
+  }, [state.confidenceThreshold]);
 
   useEffect(() => {
     if (state.phase !== "processing" || !state.media) return undefined;
@@ -117,7 +122,7 @@ export function useOcrPipeline() {
       },
       controller.signal,
     );
-    const fetching = fetchDetections(state.media.file, controller.signal);
+    const fetching = fetchDetections(state.media.file, thresholdRef.current, controller.signal);
 
     Promise.all([simulation, fetching])
       .then(([, detections]) => {

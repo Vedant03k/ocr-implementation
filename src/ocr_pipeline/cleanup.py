@@ -92,10 +92,14 @@ class TextCleaner:
             messages, tokenize=False, add_generation_prompt=True
         )
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        # The corrected output is mostly a copy of the input lines, so prompt lookup
+        # decoding can draft tokens from the prompt and verify them in one forward
+        # pass. With greedy decoding the output is identical to plain generation.
         generate_ids = self.model.generate(
             **inputs,
             max_new_tokens=min(sum(len(line.split()) for line in lines) * 3 + 40, 1024),
             do_sample=False,
+            prompt_lookup_num_tokens=10,
         )
         output = self.tokenizer.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True

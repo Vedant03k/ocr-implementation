@@ -12,6 +12,9 @@ huggingface_hub
 tiktoken
 verovio
 
+# Word-level OCR correction (dictionary + bigram context)
+symspellpy==6.10.0
+
 # Pipeline glue
 pydantic
 opencv-python

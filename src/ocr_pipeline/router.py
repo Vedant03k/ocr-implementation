@@ -21,12 +21,12 @@ def route(
     specialist: GotOcrRecognizer,
     confidence_threshold: float = 0.85,
 ) -> list[RoutedBlock]:
+    escalated = [det for det in detections if det.score < confidence_threshold]
+    specialist_texts = iter(specialist.recognize_batch([crop_polygon(image, det.poly) for det in escalated]))
     routed = []
     for det in detections:
         if det.score >= confidence_threshold:
             routed.append(RoutedBlock(box=det.box, text=det.text, confidence=det.score, source="paddleocr"))
         else:
-            crop = crop_polygon(image, det.poly)
-            text = specialist.recognize(crop)
-            routed.append(RoutedBlock(box=det.box, text=text, confidence=det.score, source="got_ocr2"))
+            routed.append(RoutedBlock(box=det.box, text=next(specialist_texts), confidence=det.score, source="got_ocr2"))
     return routed

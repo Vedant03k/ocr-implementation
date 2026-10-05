@@ -6,9 +6,15 @@ interface OcrApiResponse {
   detections: RawDetection[];
 }
 
-export async function fetchDetections(file: File, signal: AbortSignal): Promise<RawDetection[]> {
+export async function fetchDetections(
+  file: File,
+  threshold: number,
+  signal: AbortSignal,
+): Promise<RawDetection[]> {
   const formData = new FormData();
   formData.append("file", file);
+  // The backend only sends lines below this threshold to GOT-OCR2.0.
+  formData.append("threshold", String(threshold));
 
   const response = await fetch(`${API_BASE_URL}/api/ocr`, {
     method: "POST",

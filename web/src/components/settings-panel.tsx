@@ -59,6 +59,7 @@ export function SettingsPanel({
           />
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-500">
             Crops where PaddleOCR&apos;s confidence falls below this value escalate to GOT-OCR2.0.
+            Applied on upload; afterwards only lines already read by GOT-OCR2.0 can be re-routed.
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-3">

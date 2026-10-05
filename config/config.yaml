@@ -2,13 +2,31 @@ paddleocr:
   # Weights cache to models/paddleocr via PADDLE_PDX_CACHE_HOME (set in ocr_pipeline/__init__.py).
   lang: en
   device: cpu   # set to gpu / gpu:0 if paddlepaddle-gpu is installed instead of paddlepaddle
+  # Flattens photos of curled/bent pages. Off: on flat images it distorted
+  # letters (8x more errors) and cost ~1.3s per image. Re-check on real photos.
+  use_doc_unwarping: false
 
 got_ocr2:
   model_dir: models/got_ocr2
   device: cuda   # falls back to cpu if unavailable
+  max_new_tokens: 128   # per text line; one line never needs more
+  # Crops per generate() call. 4 ran out of memory on a 4GB GPU (the vision
+  # encoder needs ~3GB per batch); raise only on a larger GPU.
+  batch_size: 1
+
+word_correction:
+  enabled: true
+  max_edit_distance: 2
+  # Real words ("fir") are only replaced on lines PaddleOCR scored below this.
+  real_word_max_confidence: 0.9
+  # Only correct *to* words at least this frequent (~ the 40k most common).
+  min_candidate_frequency: 200000
 
 llm_cleanup:
-  enabled: true
+  # Whole-document LLM rewrite. Off: on the benchmark it made accuracy worse
+  # (capitalised lines, synonyms, invented words) and pushed GPU memory past
+  # 4GB. word_correction above replaces it; when both are on, word_correction wins.
+  enabled: false
   model_dir: models/llm_cleanup
   device: cuda   # falls back to cpu if unavailable
 

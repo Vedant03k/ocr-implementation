@@ -11,6 +11,7 @@ from .merge import merge_and_reorder
 from .recognizer_specialist import GotOcrRecognizer
 from .router import route
 from .schema import OCRResult
+from .word_corrector import WordCorrector
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
@@ -21,19 +22,31 @@ def load_config(path: str) -> dict:
 
 
 def run(input_path: str, config: dict) -> OCRResult:
-    detector = PaddleDetector(lang=config["paddleocr"]["lang"], device=config["paddleocr"].get("device", "cpu"))
+    detector = PaddleDetector(
+        lang=config["paddleocr"]["lang"],
+        device=config["paddleocr"].get("device", "cpu"),
+        use_doc_unwarping=config["paddleocr"].get("use_doc_unwarping", False),
+    )
     specialist = GotOcrRecognizer(
         model_dir=config["got_ocr2"]["model_dir"],
         device=config["got_ocr2"].get("device"),
+        max_new_tokens=config["got_ocr2"].get("max_new_tokens", 128),
+        batch_size=config["got_ocr2"].get("batch_size", 4),
     )
     threshold = config["router"]["confidence_threshold"]
 
     cleanup_cfg = config.get("llm_cleanup", {})
-    cleaner = (
-        TextCleaner(cleanup_cfg["model_dir"], cleanup_cfg.get("device"))
-        if cleanup_cfg.get("enabled")
-        else None
-    )
+    correction_cfg = config.get("word_correction", {})
+    if correction_cfg.get("enabled"):
+        cleaner = WordCorrector(
+            max_edit_distance=correction_cfg.get("max_edit_distance", 2),
+            real_word_max_confidence=correction_cfg.get("real_word_max_confidence", 0.9),
+            min_candidate_frequency=correction_cfg.get("min_candidate_frequency", 200_000),
+        )
+    elif cleanup_cfg.get("enabled"):
+        cleaner = TextCleaner(cleanup_cfg["model_dir"], cleanup_cfg.get("device"))
+    else:
+        cleaner = None
 
     blocks = []
     if os.path.splitext(input_path)[1].lower() in VIDEO_EXTENSIONS:
@@ -57,7 +70,11 @@ def run(input_path: str, config: dict) -> OCRResult:
         blocks.extend(merge_and_reorder(routed))
 
     if cleaner is not None and blocks:
-        cleaned_texts = cleaner.clean_lines([block.text for block in blocks])
+        texts = [block.text for block in blocks]
+        if isinstance(cleaner, WordCorrector):
+            cleaned_texts = cleaner.correct_lines(texts, [block.confidence for block in blocks])
+        else:
+            cleaned_texts = cleaner.clean_lines(texts)
         blocks = [
             block.model_copy(update={"cleaned_text": cleaned_text})
             for block, cleaned_text in zip(blocks, cleaned_texts)

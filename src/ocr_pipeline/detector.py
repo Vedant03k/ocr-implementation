@@ -21,14 +21,21 @@ class PaddleDetector:
     instead of invoking PaddleOCR's recognizer a second time.
     """
 
-    def __init__(self, lang: str = "en", device: str = "cpu", use_textline_orientation: bool = True):
+    def __init__(
+        self,
+        lang: str = "en",
+        device: str = "cpu",
+        use_textline_orientation: bool = True,
+        use_doc_unwarping: bool = False,
+    ):
         from paddleocr import PaddleOCR
 
         self._ocr = PaddleOCR(
             lang=lang,
             device=device,
             use_textline_orientation=use_textline_orientation,
-            enable_mkldnn=False,  # works around a PaddlePaddle 3.3.x CPU oneDNN bug
+            use_doc_unwarping=use_doc_unwarping,
+            enable_mkldnn=False,  # works around a PaddlePaddle 3.3.x CPU oneDNN bug, still present in 3.3.1
         )
 
     def detect(self, image: np.ndarray) -> list[Detection]:
